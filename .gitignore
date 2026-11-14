@@ -1,0 +1,17 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Secrets
+.env
+
+# Claude Code worktrees
+.claude/worktrees/
+
+# Large experiment inputs and outputs (commit small samples; link the rest)
+experiments/*/data/
+experiments/*/out/
+
+# Language-specific entries: add once tooling is decided (Q2 in docs/open-questions.md)
