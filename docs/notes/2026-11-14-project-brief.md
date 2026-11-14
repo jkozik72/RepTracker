@@ -3,7 +3,7 @@ source: docs/sources/2026-11-14-project-brief.md
 type: internal
 date: 2026-11-14        # the day the message was sent
 digested: 2026-11-14
-relates-to: [Q1, Q2, Q3, Q4, Q5]
+relates-to: [Q1, Q3, Q4, Q5, Q6, Q7, Q8, Q9, Q10, Q11, Q12, Q13, Q14, Q15, Q16, Q17, D2, approaches/frame-differencing, approaches/kalman-filter, approaches/bayes-filter, approaches/yolo-detector]
 ---
 
 # Project brief: what RepTracker is (chat message, 2026-11-14)
@@ -73,24 +73,28 @@ This is the first statement of what RepTracker is. It answers Q1 (what it tracks
 
 ## Open questions
 
-- Which AI model analyzes the images, and does it have to be a VLM? (s. 8)
-- What is the poll rate? (s. 8–9)
-- Where does "lizard present" come from: motion tracking, the VLM or LLM, or both (s. 8, 37–38)? It decides when to poll, and the preference is one AI call per poll (s. 39).
-- What is the finite set of statuses, and what is in the structured report? (s. 12–14)
-- Which statistics, beyond the examples? (s. 15–17, 37)
-- Does research collect images, and what goes in the folder? (s. 7–8)
-- Is a YOLO model necessary, or are frame derivatives plus a Kalman or Bayes filter enough? (s. 32–34)
-- How are repeated frames detected and handled? (s. 35–36)
-- Which sensors does the time series hold? (s. 24)
-- What is the "previous data" in the add-lizard form? (s. 21)
-- "Reptiles" (s. 2) but "lizard" everywhere else: lizards only, or other reptiles too?
+All are in `docs/open-questions.md` under the ID shown.
+
+- Is a YOLO model necessary, or are frame derivatives plus a Kalman or Bayes filter enough? (s. 32–34) → Q6
+- How are repeated frames detected and handled? (s. 35–36) → Q7
+- Where does "lizard present" come from: motion tracking, the VLM or LLM, or both (s. 8, 37–38)? It decides when to poll, and the preference is one AI call per poll (s. 39). And what is the poll rate (s. 8–9)? → Q8
+- Which AI model analyzes the images, and does it have to be a VLM? (s. 8) → Q9
+- What is the finite set of statuses, and what is in the structured report? (s. 12–14) → Q10
+- Which statistics, beyond the examples? (s. 15–17, 37) → Q11
+- Does research collect images, and what goes in the folder? (s. 7–8) → Q12
+- Which sensors does the time series hold? (s. 24) → Q13
+- Which videos, and in what form? (s. 23) → Q14
+- The movement graph covers a day (s. 3) and the dashboard looks real-time (s. 27), but the videos are finite (s. 27–28): how does a video map onto dashboard time? → Q15
+- "Reptiles" (s. 2) but "lizard" everywhere else: lizards only, or other reptiles too? → Q16
+- What is the "previous data" in the add-lizard form? (s. 21) → Q17
 
 ## Actions
 
-Proposed, waiting for approval; nothing outside `docs/sources/` and `docs/notes/` has been changed yet.
-
-- [ ] Update `docs/overview.md`, `docs/architecture.md`, and `README.md` from this note
-- [ ] Add approach pages in `docs/approaches/`: frame differencing, Kalman filter, Bayes filter, YOLO detector (all Candidate)
-- [ ] Log the files-not-streams choice in `docs/decisions.md` (s. 22–29)
-- [ ] Move Q1, Q3, Q4, Q5 to Answered in `docs/open-questions.md`; add the questions above
-- [ ] Add the domain terms to the glossary in `docs/functions.md`
+- [x] Rewrote `docs/overview.md`, and the description and Status in `README.md`: what we're building, nine requirements, scope, constraints
+- [x] Rewrote `docs/architecture.md`: block diagram and six components
+- [x] Added `docs/approaches/frame-differencing.md`, `kalman-filter.md`, `bayes-filter.md`, `yolo-detector.md`, all Candidate, with this note under Evidence
+- [x] Logged D2 in `docs/decisions.md`: recorded files instead of live cameras and sensors (s. 22–29)
+- [x] `docs/open-questions.md`: answered Q1, Q3, Q4, Q5; added Q6–Q17
+- [x] Added the domain terms to the glossary in `docs/functions.md`
+- [ ] Experiment: locate the lizard with frame differencing on a sample video, including repeated frames (Q6, Q7)
+- [ ] Experiment: Kalman filter against Bayes filter for tracking position while the lizard is not on screen (Q6)

@@ -3,7 +3,7 @@ source: docs/sources/2026-11-14-whiteboard-ui.jpg
 type: internal
 date: 2026-11-14        # the day the photo was received; the file carries no capture date
 digested: 2026-11-14
-relates-to: [Q1]
+relates-to: [Q1, Q12, Q13, Q17]
 ---
 
 # Whiteboard: UI (photo, received 2026-11-14)
@@ -39,14 +39,13 @@ The layout of the web app's pages. It matches the brief (s. 18–21) and adds a 
 
 ## Open questions
 
-- Should the dashboard display the results of research? (asked on the board)
-- What is "AI questions" [?]: does the user ask the AI about a lizard? (Dashboard)
-- What are the sensors "H, C"? (Add lizard form)
-- What is the optional "previous data"? (Add lizard form)
+- Should the dashboard display the results of research? (asked on the board) → Q12
+- What are the sensors "H, C"? (Add lizard form) → Q13
+- What is "AI questions" [?]: does the user ask the AI about a lizard? (Dashboard) → Q17
+- What is the optional "previous data"? (Add lizard form) → Q17
 
 ## Actions
 
-Proposed, waiting for approval; nothing outside `docs/sources/` and `docs/notes/` has been changed yet.
-
-- [ ] Describe the dashboard, settings page, and add-lizard form in `docs/overview.md` and `docs/architecture.md`
-- [ ] Add the board's questions to `docs/open-questions.md`
+- [x] `docs/overview.md`: Dashboard, Add-lizard form, Settings and secrets
+- [x] `docs/architecture.md`: the pages table under Web app
+- [x] `docs/open-questions.md`: Q12 (display research results), Q13 (sensors "H, C"), Q17 ("previous data", "AI questions")

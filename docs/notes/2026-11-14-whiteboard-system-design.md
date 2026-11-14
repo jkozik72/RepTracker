@@ -3,7 +3,7 @@ source: docs/sources/2026-11-14-whiteboard-system-design.jpg
 type: internal
 date: 2026-11-14        # the day the photo was received; the file carries no capture date
 digested: 2026-11-14
-relates-to: [Q1, Q2, Q3, Q4, Q5]
+relates-to: [Q2, Q3, Q4, Q6, Q7, Q8, Q14, D2, approaches/frame-differencing, approaches/kalman-filter, approaches/bayes-filter]
 ---
 
 # Whiteboard: system design (photo, received 2026-11-14)
@@ -119,10 +119,10 @@ The board is the team's first architecture sketch and adds what the brief leaves
 
 ## Open questions
 
-- Is Flask with HTML and CSS decided, or a sketch? (High level; Q2)
+- Is Flask with HTML and CSS decided, or a sketch? (High level) → Q2
 - What does "Function names stay the same" cover: which functions, and the same across what? (High level)
 - What does the "Sophia" label on the dashed box mean? (High level)
-- "Speed and VLM check" feeds "lizard present", and the backend polls the VLM/LLM "if lizard present": does presence need the VLM before the VLM is polled? (Design decisions)
+- "Speed and VLM check" feeds "lizard present", and the backend polls the VLM/LLM "if lizard present": does presence need the VLM before the VLM is polled? (Design decisions) → Q8
 - What is "D" in "same D"? (Design decisions)
 - What do "real" and "fake" mean on sections L1 and L2? (Secrets and settings)
 - What is the second secret in "API key and Website", and what does "User get api" [?] mean? (Secrets and settings)
@@ -131,9 +131,8 @@ The board is the team's first architecture sketch and adds what the brief leaves
 
 ## Actions
 
-Proposed, waiting for approval; nothing outside `docs/sources/` and `docs/notes/` has been changed yet.
-
-- [ ] Update `docs/architecture.md` from the High level, AI pipeline, and Design decisions diagrams
-- [ ] Log "files not streams" in `docs/decisions.md` (Design decisions)
-- [ ] Add Flask with HTML and CSS as the candidate answer to Q2 in `docs/open-questions.md`
-- [ ] Cite the Motion tracking and Video processing regions as evidence in the approach pages
+- [x] `docs/architecture.md`: the block diagram, the web app's layers, and the data flow of Statistics and Image analysis, from the High level, AI pipeline, and Design decisions diagrams
+- [x] `docs/overview.md`: Alerts, Settings and secrets, and the AI access constraint
+- [x] Logged D2 in `docs/decisions.md`: "files not streams" (Design decisions)
+- [x] `docs/open-questions.md`: Flask with HTML and CSS is the candidate answer to Q2; cited in Q7, Q8, Q14
+- [x] Cited the Motion tracking and Video processing regions under Evidence in `docs/approaches/frame-differencing.md`, `kalman-filter.md`, `bayes-filter.md`
