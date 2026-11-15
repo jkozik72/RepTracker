@@ -14,4 +14,7 @@ Thumbs.db
 experiments/*/data/
 experiments/*/out/
 
-# Language-specific entries: add once tooling is decided (Q2 in docs/open-questions.md)
+# Python
+__pycache__/
+*.pyc
+.venv/

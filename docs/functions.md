@@ -56,6 +56,31 @@ Grouped by module or file. Entry format:
 - **Notes:** why this name, if not obvious; link the approach page or decision
 ```
 
-### `src/` (TBD, Q2)
+Names in `src/website/` are written as the code has them (PascalCase); the case style is not decided yet (Q2).
 
-No functions yet.
+### `src/website/main.py`
+
+### `SendPrompt`
+- **Does:** Makes one poll: sends the newest images of an enclosure and the species research to Gemini and returns the report.
+- **Lives in:** `src/website/main.py`
+- **In / out:** lizard name, path to the species research file, path to a PDF, an image, or a folder of images → `dataSchema` filled out (temperatures in °F, humidity in %)
+- **Notes:** One AI call per poll. The third parameter is still called `pathToPDF`, but a folder of images works and needs no PDF step.
+
+### `src/website/ai.py`
+
+### `AnalyzeEnclosure`
+- **Does:** Builds the request (images, prompt, schema, research), calls Gemini once, and returns the normalized report.
+- **Lives in:** `src/website/ai.py`
+- **In / out:** media paths, species, research text, schema, allowed options, prompt template → report dict
+- **Notes:** Uses Vertex AI with the machine's Google login; no key in the repo. Project, location, and model come from `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `REPTRACKER_MODEL`.
+
+### `CollectMedia`
+- **Does:** Chooses the files to send for a path: a PDF, one image, or the newest 8 images of a folder.
+- **Lives in:** `src/website/ai.py`
+- **In / out:** path → list of file paths, oldest first
+
+### `NormalizeReport`
+- **Does:** Forces the model's reply into the shape of the schema, so the rest of the app can trust the keys and values.
+- **Lives in:** `src/website/ai.py`
+- **In / out:** raw reply, schema, allowed options → report dict
+- **Notes:** A value outside its options becomes "can't see lizard" where the field has that option, otherwise the schema default.
