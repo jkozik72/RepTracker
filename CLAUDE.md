@@ -1,6 +1,6 @@
 # Claude Guide
 
-RepTracker is a dashboard for keeping track of your reptiles. It runs on a single computer as a local website and, from recorded video and sensor files, shows for each lizard a video, a movement graph, statistics, and an AI-produced status with alerts (see `docs/overview.md`). This file describes how the repo is organized and how information flows through it. Claude Code reads it every session; people should read it once.
+RepTracker is a dashboard for keeping track of your reptiles and amphibians. It runs as a website on one computer or a Raspberry Pi on the local network (D7, D8) and, from camera video and sensor files, shows for each animal a video, movement and environment graphs, statistics, notifications, and an AI-produced status with alerts (see `docs/overview.md`). This file describes how the repo is organized and how information flows through it. Claude Code reads it every session; people should read it once.
 
 ## Layout
 
