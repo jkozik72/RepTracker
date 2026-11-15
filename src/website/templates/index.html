@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RepTracker</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cg transform='rotate(-18 16 16)'%3E%3Cg fill='none' stroke='%233f7d3a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M13.6 11.2 9.4 9.2 8.4 6.4M18.4 11.2l4.2-2 1-2.8M13.6 18 9.4 20l-1 2.8M18.4 18l4.2 2 1 2.8'/%3E%3Cpath d='M16 20.5c0 5.2 4.6 6.6 6 3.8.9-1.9-.8-3.1-2-2' stroke-width='2.4'/%3E%3C/g%3E%3Cg fill='%233f7d3a'%3E%3Ccircle cx='8.3' cy='6' r='1.3'/%3E%3Ccircle cx='23.7' cy='6' r='1.3'/%3E%3Ccircle cx='8.3' cy='23.2' r='1.3'/%3E%3Ccircle cx='23.7' cy='23.2' r='1.3'/%3E%3Cellipse cx='16' cy='6.8' rx='3.3' ry='3.7'/%3E%3Cellipse cx='16' cy='14.8' rx='3.8' ry='6.3'/%3E%3C/g%3E%3Cg fill='%23e0a02a'%3E%3Ccircle cx='14.7' cy='12.6' r='.9'/%3E%3Ccircle cx='17.3' cy='15' r='.9'/%3E%3Ccircle cx='15' cy='17.6' r='.8'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E">
 <style>
   :root {
     --bg: #f4f5f0; --surface: #ffffff; --surface-2: #eef0e9; --border: #dcdfd4;
@@ -27,8 +28,11 @@
   .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
   header { background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; }
   .brand-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 14px; }
-  .brand { font-size: 22px; font-weight: 700; letter-spacing: -.01em; margin: 0; }
-  .brand span { color: var(--accent); }
+  .brand { font-size: 22px; font-weight: 800; letter-spacing: -.02em; margin: 0; display: flex; align-items: center; gap: 8px; }
+  .brand .word span { color: var(--accent); }
+  .brand-mark { width: 34px; height: 34px; color: var(--accent); transform: rotate(-18deg); flex: none; }
+  .brand-mark .spots { fill: var(--warn); opacity: .9; }
+  .brand-mark .eyes { fill: var(--surface); }
   nav[role="tablist"] { display: flex; gap: 4px; margin-top: 10px; }
   .tab { appearance: none; border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600; padding: 8px 14px; cursor: pointer; border-bottom: 2px solid transparent; }
   .tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
@@ -89,6 +93,7 @@
   .video video { width: 100%; height: 100%; object-fit: contain; display: block; }
   .video .badge { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,.62); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; letter-spacing: .03em; font-variant-numeric: tabular-nums; }
   .video .badge.r { left: auto; right: 8px; }
+  .video .badge { max-width: calc(50% - 12px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .video .cover { position: absolute; inset: 0; display: grid; place-items: center; background: #0d0f0c; text-align: center; padding: 16px; }
   .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
   .stat { background: var(--surface-2); border-radius: 8px; padding: 7px 10px; }
@@ -109,8 +114,12 @@
   .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin: 2px 0 4px; }
   .legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: 3px; margin-right: 5px; }
 
-  /* Compact view: 2 per row, name + alerts, video */
-  .lizards.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  /* Always 2 per row; a lizard opens to full width when its name is clicked */
+  .lizards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .lizards > .empty, .lizard.expanded { grid-column: 1 / -1; }
+  .lizard-name.open { appearance: none; border: 0; background: none; padding: 0; font: inherit; font-size: 20px; font-weight: 700; color: var(--text); cursor: pointer; }
+  .lizard-name.open:hover, .compact-head .open:hover { color: var(--accent); }
+  .open .chev { font-size: .7em; color: var(--muted); margin-left: 6px; }
   .lizard.compact { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
   .compact-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
   .compact-head .open { appearance: none; border: 0; background: none; padding: 0; font: inherit; font-size: 17px; font-weight: 700; color: var(--text); cursor: pointer; text-align: left; }
@@ -153,10 +162,12 @@
   .upload-row input[type="file"] { flex: 1; padding: 5px; }
   .file-list { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
   .file-list li { font: 12.5px ui-monospace, Consolas, monospace; background: var(--surface-2); padding: 2px 8px; border-radius: 6px; }
+  .file-list li.default { background: var(--ok-bg); color: var(--ok); }
+  progress { width: 100%; height: 8px; margin-top: 6px; accent-color: var(--accent); }
   .ok-msg { color: var(--ok); font-size: 13px; font-weight: 600; margin: 6px 0 0; }
 
   @media (max-width: 760px) {
-    .lizard, .add-form, .add-form fieldset, .charts, .lizards.compact { grid-template-columns: minmax(0, 1fr); }
+    .lizard, .add-form, .add-form fieldset, .charts, .lizards { grid-template-columns: minmax(0, 1fr); }
     .ask form, .upload-row { flex-direction: column; align-items: stretch; }
   }
 </style>
@@ -165,7 +176,23 @@
 <header>
   <div class="wrap">
     <div class="brand-row">
-      <h1 class="brand">Rep<span>Tracker</span></h1>
+      <h1 class="brand">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <!-- top-down gecko: toe pads, spotted back, curled tail -->
+          <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13.6 11.2 9.4 9.2 8.4 6.4M18.4 11.2l4.2-2 1-2.8M13.6 18 9.4 20l-1 2.8M18.4 18l4.2 2 1 2.8"/>
+            <path d="M16 20.5c0 5.2 4.6 6.6 6 3.8.9-1.9-.8-3.1-2-2" stroke-width="2.4"/>
+          </g>
+          <g fill="currentColor">
+            <circle cx="8.3" cy="6" r="1.3"/><circle cx="23.7" cy="6" r="1.3"/><circle cx="8.3" cy="23.2" r="1.3"/><circle cx="23.7" cy="23.2" r="1.3"/>
+            <ellipse cx="16" cy="6.8" rx="3.3" ry="3.7"/>
+            <ellipse cx="16" cy="14.8" rx="3.8" ry="6.3"/>
+          </g>
+          <g class="spots"><circle cx="14.7" cy="12.6" r=".9"/><circle cx="17.3" cy="15" r=".9"/><circle cx="15" cy="17.6" r=".8"/></g>
+          <g class="eyes"><circle cx="14.6" cy="5.6" r=".75"/><circle cx="17.4" cy="5.6" r=".75"/></g>
+        </svg>
+        <span class="word">Rep<span>Tracker</span></span>
+      </h1>
       <span class="pill dev" id="mode-pill" hidden></span>
     </div>
     <nav role="tablist" aria-label="Sections">
@@ -177,16 +204,6 @@
 
 <main class="wrap">
   <section id="view-dashboard" role="tabpanel" aria-labelledby="tab-dashboard">
-    <div class="toolbar">
-      <div>
-        <span class="label" id="view-toggle-label">View</span>
-        <div class="seg" role="group" aria-labelledby="view-toggle-label" id="view-toggle">
-          <button type="button" data-view="full">Full</button>
-          <button type="button" data-view="compact">Compact</button>
-        </div>
-      </div>
-    </div>
-
     <!-- Dev mode: simulated clock -->
     <div class="devbar" id="devbar" hidden>
       <span class="pill dev">Dev mode</span>
@@ -225,8 +242,9 @@
           </select>
         </div>
         <div>
-          <label for="f-width">Enclosure width (cm)</label>
-          <input id="f-width" name="width" type="number" min="10" max="1000" step="1" value="90" required>
+          <label for="f-width">Enclosure width (cm, optional)</label>
+          <input id="f-width" name="width" type="number" min="10" max="1000" step="1" placeholder="e.g. 90">
+          <p class="hint">Blank: position is a % of the video's width.</p>
         </div>
 
         <fieldset>
@@ -312,10 +330,11 @@
         <div>
           <h2>Upload a camera video <span style="text-transform:none;letter-spacing:0" data-mode-name></span></h2>
           <form class="upload-row" data-upload="videos">
-            <input type="file" name="file" accept="video/mp4,.mp4" required aria-label="Video file (.mp4)">
+            <input type="file" name="file" accept="video/mp4,.mp4" multiple required aria-label="Video files (.mp4)">
             <button class="btn primary" type="submit">Upload</button>
           </form>
-          <p class="hint">An .mp4. It shows up in the add-lizard Camera dropdown under its file name without “.mp4”.</p>
+          <p class="hint">One or more .mp4 files, up to 3 GB each. Each shows up in the add-lizard Camera dropdown under its file name without “.mp4”.</p>
+          <progress data-upload-progress max="100" value="0" hidden></progress>
           <p class="error" data-upload-error hidden></p><p class="ok-msg" data-upload-ok hidden></p>
           <ul class="file-list" data-file-list="videos"></ul>
         </div>
@@ -323,10 +342,11 @@
         <div>
           <h2>Upload sensor data <span style="text-transform:none;letter-spacing:0" data-mode-name></span></h2>
           <form class="upload-row" data-upload="sensors">
-            <input type="file" name="file" accept="application/json,.json" required aria-label="Sensor file (.json)">
+            <input type="file" name="file" accept="application/json,.json" multiple required aria-label="Sensor files (.json)">
             <button class="btn primary" type="submit">Upload</button>
           </form>
-          <p class="hint">A .json file: <code>{"t": 300000, "value": [86.8, 86.9, …]}</code>. <code>t</code> is the time between samples in ms; <code>value</code> is the samples. The series starts when a lizard is added and loops. Units are set per lizard.</p>
+          <p class="hint">A .json file: <code>{"t": 300000, "value": [86.8, 86.9, …]}</code>. <code>t</code> is the time between samples in ms; <code>value</code> is the samples. The series starts when a lizard is added and loops. Units are set per lizard. <strong>Default</strong> files are built in and available in every mode.</p>
+          <progress data-upload-progress max="100" value="0" hidden></progress>
           <p class="error" data-upload-error hidden></p><p class="ok-msg" data-upload-ok hidden></p>
           <ul class="file-list" data-file-list="sensors"></ul>
         </div>
@@ -433,7 +453,7 @@ function renderSummary() {
   const el = $("#summary");
   if (!lizards.length) {
     el.innerHTML = `<span class="summary-count">No lizards yet</span><span class="hint" style="margin:0">${mode() === "main" && !media.videos.length
-      ? "Main mode starts empty. Turn on dev mode in Settings to upload videos and sensor files, then add a lizard below."
+      ? "Main mode starts empty. Turn on dev mode in Settings to upload a camera video (default sensor files are built in), then add a lizard below."
       : "Add one below to start tracking."}</span>`;
     return;
   }
@@ -448,7 +468,7 @@ function renderSummary() {
 function renderVideoBox(c) {
   return `<div class="video">
       <video src="/media/${mode()}/videos/${encodeURIComponent(c.camera.video)}.mp4" muted playsinline preload="auto" data-video></video>
-      <span class="badge" data-cam-time></span><span class="badge r">${esc(c.camera.video)}</span>
+      <span class="badge" data-cam-time></span><span class="badge r" title="Source: ${esc(c.camera.video)}.mp4">Source: ${esc(c.camera.video)}</span>
       <div class="cover" data-cover hidden></div>
     </div>`;
 }
@@ -459,7 +479,7 @@ function renderCompactLizard(l) {
   return `
   <article class="card lizard compact" id="lizard-${l.id}" data-id="${l.id}">
     <div class="compact-head">
-      <button class="open" type="button" data-action="open" title="Open ${esc(c.name)} in full view">${esc(c.name)}</button>
+      <button class="open" type="button" data-action="open" aria-expanded="false" title="Show ${esc(c.name)}'s details">${esc(c.name)}<span class="chev" aria-hidden="true">▸</span></button>
       <div class="compact-alerts">
         ${alerts.length ? shown.map(a => `<span class="pill bad">${esc(a)}</span>`).join("") + (more > 0 ? `<span class="pill bad">+${more}</span>` : "")
                         : `<span class="pill ${s}">${STATUS_LABEL[s]}</span>`}
@@ -478,17 +498,25 @@ function renderAnalysis(l) {
     <p class="hint">Range ${esc(fmtShort(Date.parse(l.latest.range.start)))} – ${esc(fmtShort(Date.parse(l.latest.range.end)))} · provider: ${esc(l.latest.provider)}</p>`;
 }
 
+// Lizards start compact; clicking a name opens it to full width (and clicking again closes it).
+const expanded = new Set();
+function toggleExpand(id, open = !expanded.has(id)) {
+  open ? expanded.add(id) : expanded.delete(id);
+  const l = lizards.find(x => x.id === id);
+  if (l) replaceLizard(l);
+}
+
 function renderLizard(l) {
-  if (settings.view === "compact") return renderCompactLizard(l);
+  if (!expanded.has(l.id)) return renderCompactLizard(l);
   const c = l.config, s = getStatus(l), r = l.latest ? l.latest.result : {};
   const ai = k => `<dd class="cap">${esc(r[k] ?? "—")}</dd>`;
   const sensorStats = channels(c).map((ch, i) =>
     `<div class="stat ${ch.key}"><dt>${ch.key === "hot" ? "Hot" : "Cold"} (${ch.side}) ${ch.kind === "temperature" ? "temp" : "humidity"}</dt><dd data-sensor="${i}">—</dd></div>`).join("");
   const def = simNow();
   return `
-  <article class="card lizard" id="lizard-${l.id}" data-id="${l.id}">
+  <article class="card lizard expanded" id="lizard-${l.id}" data-id="${l.id}">
     <div class="lizard-head full">
-      <div><h3 class="lizard-name">${esc(c.name)}</h3><span class="lizard-meta">${esc(c.species)} · ${esc(c.camera.view)} camera · ${c.enclosureWidthCm} cm wide</span></div>
+      <div><h3 style="display:inline;margin:0"><button class="lizard-name open" type="button" data-action="open" aria-expanded="true" title="Collapse ${esc(c.name)}">${esc(c.name)}<span class="chev" aria-hidden="true">▾</span></button></h3><span class="lizard-meta">${esc(c.species)} · ${esc(c.camera.view)} camera · ${c.enclosureWidthCm ? `${c.enclosureWidthCm} cm wide` : "position in % of video width"}</span></div>
       <div style="display:flex;gap:8px;align-items:center">
         <span class="pill ${s}">${STATUS_LABEL[s]}</span>
         <button class="btn ghost" type="button" data-action="remove">Remove</button>
@@ -544,7 +572,6 @@ function renderLizard(l) {
 
 function renderLizards() {
   const el = $("#lizards");
-  el.classList.toggle("compact", settings.view === "compact");
   el.innerHTML = lizards.length ? lizards.map(renderLizard).join("") : `<div class="card empty">No lizards yet.</div>`;
   renderSummary();
   for (const l of lizards) channels(l.config).forEach(ch => loadSeries(ch.series));
@@ -611,17 +638,22 @@ async function renderSensorCharts(card, l, now) {
   winEl.textContent = `Window: ${h < 48 ? h.toFixed(1) + " h" : (h / 24).toFixed(1) + " days"} (grows to 5 days, then slides).`;
 }
 
+// Position unit: cm from the left wall when the enclosure width is set, else % of the video's width.
+function positionScale(c) {
+  return c.enclosureWidthCm ? { max: c.enclosureWidthCm, unit: "cm from the left wall", short: "cm" }
+                            : { max: 100, unit: "% of the video's width from the left", short: "%" };
+}
 function renderPositionChart(l) {
-  const md = l.latest && l.latest.result["Movement Data"];
-  if (!md || !md.length) return `<p class="hint" style="margin:0">No position data yet. It comes from the AI analysis (cm from the left wall).</p>`;
-  const W = l.config.enclosureWidthCm;
+  const md = l.latest && l.latest.result["Movement Data"], ps = positionScale(l.config);
+  if (!md || !md.length) return `<p class="hint" style="margin:0">No position data yet. It comes from the AI analysis (${ps.unit}).</p>`;
+  const W = ps.max;
   return lineChart({
-    series: [{ name: "position", color: "var(--line)", points: md.map((m, i) => [i, m.position_cm]) }],
+    series: [{ name: "position", color: "var(--line)", points: md.map((m, i) => [i, m.position ?? m.position_cm]) }],
     xMin: 0, xMax: Math.max(1, md.length - 1), yMin: 0, yMax: W, width: 1040, height: 190,
     yTicks: [0, W / 4, W / 2, 3 * W / 4, W],
     xFmt: i => (md[Math.round(i)] || {}).time?.replace(/^\d{4}-\d\d-\d\d /, "").replace(" UTC", "") || "",
-    yLabel: "Position, cm from the left wall"
-  }) + `<p class="hint" style="margin:2px 0 0">cm from the left wall (0 = left, ${W} = right; hot side ${esc(l.config.sensors.hotSide)}) · one point per image, UTC</p>`;
+    yLabel: `Position, ${ps.unit}`
+  }) + `<p class="hint" style="margin:2px 0 0">${ps.unit} (0 = left, ${W} = right; hot side ${esc(l.config.sensors.hotSide)}) · one point per image, UTC</p>`;
 }
 
 /* ================= Real-time loop: camera + sensors ================= */
@@ -668,17 +700,6 @@ function syncVideo(v, offsetS, speed) {
   }
 }
 setInterval(() => tick(false), 250);
-
-/* ================= View toggle (full / compact) ================= */
-function renderViewToggle() {
-  document.querySelectorAll("#view-toggle button").forEach(b => b.setAttribute("aria-pressed", b.dataset.view === settings.view));
-}
-function setView(view, focusId) {
-  if (settings.view === view) return;
-  settings.view = view; saveSettings(); renderViewToggle(); renderLizards();
-  if (focusId) document.getElementById(`lizard-${focusId}`)?.scrollIntoView({ block: "start" });
-}
-$("#view-toggle").addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) setView(b.dataset.view); });
 
 /* ================= Dev mode ================= */
 function renderDevBar() {
@@ -728,13 +749,20 @@ async function showBundle(card, lizardId, m) {
 $("#summary").addEventListener("click", e => {
   const a = e.target.closest("[data-goto]"); if (!a) return;
   e.preventDefault();
+  toggleExpand(a.dataset.goto, true);
   document.getElementById(`lizard-${a.dataset.goto}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
 $("#lizards").addEventListener("click", async e => {
   const card = e.target.closest(".lizard"); if (!card) return;
   const id = card.dataset.id, l = lizards.find(x => x.id === id);
-  if (e.target.closest("[data-action='open']")) { setView("full", id); return; }
+  if (e.target.closest("[data-action='open']")) {
+    toggleExpand(id);
+    const card = document.getElementById(`lizard-${id}`);
+    card.querySelector("[data-action='open']").focus({ preventScroll: true });
+    if (expanded.has(id)) card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    return;
+  }
   if (e.target.closest("[data-action='remove']")) {
     if (!confirm(`Remove ${l.config.name} from the dashboard? Its folder and data stay on disk.`)) return;
     await api("DELETE", `/lizards/${id}`);
@@ -813,7 +841,8 @@ addForm.addEventListener("submit", async e => {
   e.preventDefault();
   const f = addForm.elements;
   const body = {
-    name: f.name.value.trim(), species: f.species.value, enclosureWidthCm: +f.width.value,
+    name: f.name.value.trim(), species: f.species.value,
+    enclosureWidthCm: f.width.value.trim() === "" ? null : +f.width.value,
     createdAt: new Date(simNow()).toISOString(),
     camera: { view: f.view.value, video: f.video.value },
     sensors: {
@@ -850,8 +879,10 @@ function renderSettings() {
   document.querySelectorAll("#mode-toggle button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === settings.mode));
   document.querySelectorAll("[data-mode-name]").forEach(el => el.textContent = `· ${mode()} mode`);
   for (const kind of ["videos", "sensors"]) {
-    const list = media[kind];
-    $(`[data-file-list="${kind}"]`).innerHTML = list.length ? list.map(n => `<li>${esc(n)}</li>`).join("") : `<li style="background:none;padding:0;font-family:inherit" class="hint">None yet</li>`;
+    const list = media[kind], defaults = media.defaultSensors || [];
+    $(`[data-file-list="${kind}"]`).innerHTML = list.length
+      ? list.map(n => defaults.includes(n) && kind === "sensors" ? `<li class="default" title="Built-in default, available in every mode">${esc(n)} · default</li>` : `<li>${esc(n)}</li>`).join("")
+      : `<li style="background:none;padding:0;font-family:inherit" class="hint">None yet</li>`;
   }
 }
 $("#dev-mode").addEventListener("change", e => {
@@ -866,21 +897,51 @@ $("#mode-toggle").addEventListener("click", e => {
 document.querySelectorAll("[data-upload]").forEach(form => form.addEventListener("submit", async e => {
   e.preventDefault();
   const wrap = form.parentElement, err = wrap.querySelector("[data-upload-error]"), ok = wrap.querySelector("[data-upload-ok]");
-  const btn = form.querySelector("button"), file = form.file.files[0];
+  const btn = form.querySelector("button"), files = [...form.file.files], bar = wrap.querySelector("[data-upload-progress]");
   err.hidden = ok.hidden = true;
-  if (!file) { err.textContent = "Choose a file first."; err.hidden = false; return; }
-  const fd = new FormData(); fd.append("file", file);
-  btn.disabled = true; btn.textContent = "Uploading…";
-  try {
-    const res = await readResponse(await fetch(`/api/${mode()}/media/${form.dataset.upload}`, { method: "POST", body: fd }));
-    media = await api("GET", "/media");
-    ok.textContent = `Uploaded “${res.name}” to ${mode()} mode.`; ok.hidden = false;
-    form.reset(); renderSettings();
-    if (!addForm.hidden) fillMediaSelects();
-    renderSummary();
-  } catch (x) { err.textContent = x.message; err.hidden = false; }
-  btn.disabled = false; btn.textContent = "Upload";
+  if (!files.length) { err.textContent = "Choose a file first."; err.hidden = false; return; }
+  btn.disabled = true; bar.value = 0; bar.hidden = false;
+  // One file at a time, so each gets its own progress and its own success or error.
+  const done = [], failed = [];
+  for (const [i, file] of files.entries()) {
+    const label = files.length > 1 ? `${i + 1}/${files.length} · ` : "";
+    if (file.size > MAX_UPLOAD_BYTES) { failed.push(`${file.name}: ${(file.size / 1024 ** 3).toFixed(2)} GB is over the 3 GB limit`); continue; }
+    btn.textContent = `${label}Uploading…`; bar.value = 0;
+    try {
+      const res = await uploadWithProgress(`/api/${mode()}/media/${form.dataset.upload}`, file, pct => {
+        bar.value = pct;
+        btn.textContent = pct < 100 ? `${label}Uploading… ${pct}%` : `${label}Checking…`;
+      });
+      done.push(res.name);
+    } catch (x) { failed.push(`${file.name}: ${x.message}`); }
+  }
+  try { media = await api("GET", "/media"); } catch {}
+  if (done.length) { ok.textContent = `Uploaded ${done.map(n => `“${n}”`).join(", ")} to ${mode()} mode.`; ok.hidden = false; }
+  if (failed.length) { err.innerHTML = failed.map(esc).join("<br>"); err.hidden = false; }
+  form.reset(); renderSettings();
+  if (!addForm.hidden) fillMediaSelects();
+  renderSummary();
+  btn.disabled = false; btn.textContent = "Upload"; bar.hidden = true;
 }));
+
+const MAX_UPLOAD_BYTES = 3 * 1024 ** 3;
+// fetch() can't report upload progress, so large videos go through XMLHttpRequest.
+function uploadWithProgress(url, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest(), fd = new FormData();
+    fd.append("file", file);
+    xhr.open("POST", url);
+    xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.floor(e.loaded / e.total * 100)); };
+    xhr.upload.onload = () => onProgress(100);
+    xhr.onload = () => {
+      let data = {};
+      try { data = JSON.parse(xhr.responseText); } catch {}
+      xhr.status >= 200 && xhr.status < 300 ? resolve(data) : reject(new Error(data.error || `Server error (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error("Upload failed: lost connection to the server."));
+    xhr.send(fd);
+  });
+}
 
 /* Load the current mode's media and lizards */
 async function loadMode() {
@@ -893,7 +954,8 @@ async function loadMode() {
     $("#load-error").textContent = `Couldn't reach the RepTracker server: ${x.message}. Run app.py and open http://127.0.0.1:5000.`;
     $("#load-error").hidden = false;
   }
-  renderDevBar(); renderSettings(); renderViewToggle(); renderLizards();
+  expanded.clear();
+  renderDevBar(); renderSettings(); renderLizards();
 }
 loadMode();
 </script>

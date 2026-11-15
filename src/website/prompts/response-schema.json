@@ -29,10 +29,10 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["time", "position_cm"],
+        "required": ["time", "position"],
         "properties": {
           "time": {"type": "string", "description": "the image's timestamp label"},
-          "position_cm": {"type": ["number", "null"], "description": "cm from the left wall; null if not visible"}
+          "position": {"type": ["number", "null"], "description": "horizontal position in the unit the prompt gives (cm from the left wall, or % of the image width); null if not visible"}
         }
       }
     },

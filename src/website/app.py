@@ -4,7 +4,8 @@ import main
 from main import RepTrackerError
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024   # uploads up to 500 MB
+MAX_UPLOAD_GB = 3
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_GB * 1024 ** 3   # streamed to a temp file, then to disk
 
 
 @app.errorhandler(RepTrackerError)
@@ -14,7 +15,7 @@ def handle_error(err):
 
 @app.errorhandler(413)
 def too_large(err):
-    return jsonify({"error": "File is larger than 500 MB."}), 413
+    return jsonify({"error": f"File is larger than {MAX_UPLOAD_GB} GB."}), 413
 
 
 @app.route("/")
@@ -36,7 +37,7 @@ def upload_media(mode, kind):
     file = request.files.get("file")
     if not file:
         raise RepTrackerError("Choose a file to upload.")
-    return jsonify(main.SaveUpload(mode, kind, file.filename, file.read())), 201
+    return jsonify(main.SaveUpload(mode, kind, file)), 201
 
 
 @app.get("/media/<mode>/videos/<path:name>")
@@ -46,7 +47,8 @@ def video(mode, name):
 
 @app.get("/media/<mode>/sensors/<path:name>")
 def sensor(mode, name):
-    return send_from_directory(main.SensorsDir(mode), name)
+    path = main.SensorPath(mode, name.removesuffix(".json"))   # mode upload, else shared default
+    return send_from_directory(path.parent, path.name)
 
 
 # ---------- lizards ----------

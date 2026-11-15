@@ -3,7 +3,8 @@ CONTEXT for {{name}}
 Lizard
 - Name: {{name}}
 - Species: {{species}}
-- Enclosure width: {{enclosure_width_cm}} cm
+- Enclosure width: {{enclosure_width}}
+- Position unit: {{position_unit}} (0 to {{position_max}})
 - Camera: {{camera_view}} view
 - Hot side: {{hot_side}}; cold side: {{cold_side}}
 

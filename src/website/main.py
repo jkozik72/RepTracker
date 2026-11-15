@@ -27,6 +27,7 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
+DEFAULT_SENSORS = DATA / "defaults" / "sensors"   # shared by every mode, committed, never overwritten
 PROMPTS = ROOT / "prompts"
 RESEARCH = ROOT / "research"
 
@@ -104,12 +105,30 @@ def WriteJson(path, data):
         json.dump(data, f, indent=2)
 
 
+def DefaultSensorNames():
+    return sorted(p.stem for p in DEFAULT_SENSORS.glob("*.json"))
+
+
 def ListMedia(mode):
-    """Names (without extension) of the videos and sensor series available in this mode."""
+    """Names (without extension) of the videos and sensor series available in this mode.
+
+    Sensors are this mode's uploads plus the shared defaults in data/defaults/sensors/.
+    """
+    defaults = DefaultSensorNames()
     return {
         "videos": sorted(p.stem for p in VideosDir(mode).glob("*.mp4")),
-        "sensors": sorted(p.stem for p in SensorsDir(mode).glob("*.json")),
+        "sensors": sorted(set(defaults) | {p.stem for p in SensorsDir(mode).glob("*.json")}),
+        "defaultSensors": defaults,
     }
+
+
+def SensorPath(mode, name):
+    """Where a sensor series lives: this mode's uploads first, then the shared defaults."""
+    for folder in (SensorsDir(mode), DEFAULT_SENSORS):
+        path = folder / f"{name}.json"
+        if path.exists():
+            return path
+    raise RepTrackerError(f"Sensor series '{name}' not found.")
 
 
 def MediaName(fileName):
@@ -120,16 +139,29 @@ def MediaName(fileName):
     return stem[:60]
 
 
-def SaveUpload(mode, kind, fileName, data):
-    """Save an uploaded camera video (.mp4) or sensor series (.json) into this mode's media folder."""
+MAX_SENSOR_BYTES = 50 * 1024 * 1024
+
+
+def SaveUpload(mode, kind, upload):
+    """Save an uploaded camera video (.mp4) or sensor series (.json) into this mode's media folder.
+
+    upload is the request's file (has .filename, .save(path) and .read()). Videos are streamed
+    to disk, so multi-GB files never sit in memory.
+    """
+    fileName = upload.filename or ""
     name = MediaName(fileName)
     if kind == "videos":
-        if not str(fileName).lower().endswith(".mp4"):
+        if not fileName.lower().endswith(".mp4"):
             raise RepTrackerError("Videos must be .mp4 files.")
         path = VideosDir(mode) / f"{name}.mp4"
     elif kind == "sensors":
-        if not str(fileName).lower().endswith(".json"):
+        if not fileName.lower().endswith(".json"):
             raise RepTrackerError("Sensor data must be a .json file.")
+        if name in DefaultSensorNames():
+            raise RepTrackerError(f"'{name}' is a default sensor file; rename yours to upload it.")
+        data = upload.read(MAX_SENSOR_BYTES + 1)
+        if len(data) > MAX_SENSOR_BYTES:
+            raise RepTrackerError("Sensor files are limited to 50 MB.")
         try:
             series = json.loads(data.decode("utf-8-sig"))
         except (UnicodeDecodeError, json.JSONDecodeError) as err:
@@ -141,7 +173,10 @@ def SaveUpload(mode, kind, fileName, data):
     if path.exists():
         raise RepTrackerError(f"'{path.name}' already exists in {mode} mode; rename the file to upload it.")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(data)
+    if kind == "videos":
+        upload.save(str(path))
+    else:
+        path.write_bytes(data)
     if kind == "videos":
         try:
             if VideoDurationSeconds(mode, name) <= 0:
@@ -196,12 +231,16 @@ def CreateNewLizard(mode, formData):
     name = str(formData.get("name", "")).strip()
     if not name or len(name) > 40:
         raise RepTrackerError("Name: 1 to 40 characters.")
-    try:
-        width = float(formData.get("enclosureWidthCm"))
-    except (TypeError, ValueError):
-        width = 0
-    if not 10 <= width <= 1000:
-        raise RepTrackerError("Enclosure width: 10 to 1000 cm.")
+    width = formData.get("enclosureWidthCm")
+    if width in (None, ""):
+        width = None   # optional: position is then a % of the video's width
+    else:
+        try:
+            width = float(width)
+        except (TypeError, ValueError):
+            width = 0
+        if not 10 <= width <= 1000:
+            raise RepTrackerError("Enclosure width: 10 to 1000 cm, or leave it blank.")
     camera = formData.get("camera") or {}
     sensors = formData.get("sensors") or {}
     hotSide = _Choice(sensors.get("hotSide"), SIDES, "Hot side")
@@ -267,9 +306,9 @@ def CheckSeries(series):
 @lru_cache(maxsize=128)
 def LoadSeries(mode, name):
     """A sensor series as (step_s, values). Sample i is at i * step_s; it loops after the last one."""
-    series = ReadJson(SensorsDir(mode) / f"{name}.json", None)
+    series = ReadJson(SensorPath(mode, name), None)
     if series is None:
-        raise RepTrackerError(f"Sensor series '{name}' not found.")
+        raise RepTrackerError(f"Sensor series '{name}' isn't valid JSON.")
     CheckSeries(series)
     return series["t"] / 1000, tuple(float(v) for v in series["value"])
 
@@ -323,7 +362,15 @@ def VideoDurationSeconds(mode, name):
     path = VideosDir(mode) / f"{name}.mp4"
     if not path.exists():
         raise RepTrackerError(f"Video '{name}' not found.")
-    _, secs = imageio_ffmpeg.count_frames_and_secs(str(path))
+    # Read the duration from the file's metadata (about 1 s). Decoding every frame to count
+    # them took 95 s on an 82-min 720p video, so that is only the fallback.
+    frames = imageio_ffmpeg.read_frames(str(path))
+    try:
+        secs = next(frames).get("duration")
+    finally:
+        frames.close()
+    if not secs or secs <= 0:
+        _, secs = imageio_ffmpeg.count_frames_and_secs(str(path))
     return secs
 
 
@@ -354,6 +401,14 @@ def FillTemplate(fileName, values):
     return re.sub(r"\{\{\s*(\w+)\s*\}\}", lambda m: str(values.get(m.group(1), m.group(0))), text)
 
 
+def PositionScale(config):
+    """Template values for position: cm from the left wall, or % of the video's width if no width is set."""
+    width = config.get("enclosureWidthCm")
+    if width:
+        return {"enclosure_width": f"{width:g} cm", "position_unit": "cm from the left wall", "position_max": f"{width:g}"}
+    return {"enclosure_width": "not set", "position_unit": "percent of the image width from the left edge", "position_max": "100"}
+
+
 def LabelTime(t):
     return t.strftime("%Y-%m-%d %H:%M UTC")
 
@@ -382,7 +437,7 @@ def GeneratePrompts(mode, lizardId, startIso, endIso):
     hotSide = config["sensors"]["hotSide"]
     common = {
         "name": config["name"], "species": config["species"],
-        "enclosure_width_cm": f"{config['enclosureWidthCm']:g}",
+        **PositionScale(config),
         "camera_view": config["camera"]["view"], "hot_side": hotSide,
         "cold_side": "right" if hotSide == "left" else "left",
     }
@@ -458,20 +513,23 @@ def LoadBundle(mode, lizardId, bundleId):
 # The provider is not chosen yet (Q11 on main). "mock" runs offline so the whole loop can be tested;
 # a real provider is a function with the same signature added to PROVIDERS.
 
-def _MockPosition(img, widthCm):
+def _MockPosition(img, scale):
     """Mock-only stand-in for the AI: x of the dark pixels (the sample lizard is the darkest thing)."""
     g = img.convert("L")
+    if g.width > 320:   # sampling a 4K frame pixel by pixel is slow; the mock doesn't need detail
+        g = g.resize((320, max(1, round(320 * g.height / g.width))))
     xs = [x for x in range(0, g.width, 2) for y in range(0, g.height, 2) if g.getpixel((x, y)) < 75]
-    return round(statistics.fmean(xs) / g.width * widthCm, 1) if len(xs) > 20 else None
+    return round(statistics.fmean(xs) / g.width * scale, 1) if len(xs) > 20 else None
 
 
 def MockProvider(folder, manifest, config):
-    width = config["enclosureWidthCm"]
+    width = config.get("enclosureWidthCm") or 100   # no width: % of the image width
     movement = []
     for chunk in manifest["chunks"]:
         for fr in chunk.get("frames", []):
-            movement.append({"time": fr["label"], "position_cm": _MockPosition(Image.open(folder / fr["file"]), width)})
-    seen = [m["position_cm"] for m in movement if m["position_cm"] is not None]
+            movement.append({"time": fr["label"], "position": _MockPosition(Image.open(folder / fr["file"]), width)})
+    seen = [m["position"] for m in movement if m["position"] is not None]
+    unit = "cm from the left wall" if config.get("enclosureWidthCm") else "% of the image width from the left"
     if not seen:
         activity = "can't see lizard"
     elif max(seen) - min(seen) > 0.25 * width:
@@ -488,7 +546,7 @@ def MockProvider(folder, manifest, config):
                                  "Signs of disease": "none", "Other": "none"},
         "Movement Data": movement,
         "Analysis": (f"[Mock provider, not a real AI] {config['name']} was seen in {len(seen)} of {len(movement)} images"
-                     + (f", between {min(seen):.0f} and {max(seen):.0f} cm from the left wall, mostly {activity}." if seen else ".")
+                     + (f", between {min(seen):.0f} and {max(seen):.0f} {unit}, mostly {activity}." if seen else ".")
                      + " Weight, shed and hazards need a real provider."),
     }
 

@@ -1,7 +1,7 @@
 """Generate sample "camera" videos and "sensor" time series for development.
 
 We have no real cameras or sensors, so a camera is an .mp4 in data/toy/media/videos/ and a
-sensor is a .json in data/toy/media/sensors/: {"t": <ms between samples>, "value": [samples...]}.
+sensor is a .json in data/defaults/sensors/ (shared by every mode): {"t": <ms between samples>, "value": [samples...]}.
 
 Run from src/website:  .venv/Scripts/python tools/make_samples.py
 """
@@ -17,7 +17,7 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
 VIDEOS = ROOT / "data" / "toy" / "media" / "videos"
-SENSORS = ROOT / "data" / "toy" / "media" / "sensors"
+SENSORS = ROOT / "data" / "defaults" / "sensors"
 
 W, H, FPS = 320, 180, 2
 

@@ -67,14 +67,17 @@ Every function that touches lizard data takes `mode` first: `toy` or `main`, eac
 | `CreateNewLizard` | Validates the add-lizard form, writes `reptiles/<id>/config.json`, adds it to `reptiles.json` | mode, form dict → `{id, config, latest}` |
 | `RemoveLizard` | Takes a lizard off `reptiles.json`; its folder stays | mode, id → none |
 | `ListLizards` | Every listed lizard with its config and latest analysis | mode → list |
-| `ListMedia` | Video and sensor file names without extension | mode → `{videos, sensors}` |
-| `SaveUpload` | Saves an uploaded .mp4 or sensor .json into the mode's media; rejects duplicates, unreadable videos, bad JSON | mode, kind, file name, bytes → `{kind, name}` |
+| `ListMedia` | Video and sensor file names without extension; sensors include the defaults | mode → `{videos, sensors, defaultSensors}` |
+| `SaveUpload` | Saves an uploaded .mp4 (streamed to disk, up to 3 GB) or sensor .json (up to 50 MB) into the mode's media; rejects duplicates, default names, unreadable videos, bad JSON | mode, kind, uploaded file → `{kind, name}` |
+| `DefaultSensorNames` | Names of the shared default sensor files in `data/defaults/sensors/` | → list |
+| `SensorPath` | Where a sensor file lives: the mode's uploads first, then the defaults | mode, name → path |
 | `CheckSeries` | Raises unless the sensor JSON is `{"t": ms > 0, "value": [numbers]}` | dict → none |
 | `SourceOffsetSeconds` | Seconds since the lizard's camera and sensors started; `None` before `createdAt` | config, datetime → s |
 | `ReadSensor` | Sensor value at an offset: sample `floor(s / (t/1000))`, looping | mode, series name, s → value in the series' unit |
 | `SummarizeSensors` | Min / mean / max / latest of each channel over a range, sampled each minute | mode, config, start, end → text |
 | `TakeAPicture` | One frame from the camera video | mode, video name, s into the video → PIL image |
 | `ParsePDF` | Images into one PDF, one page each, labelled with its timestamp | images, labels, path → PDF file |
+| `PositionScale` | Prompt values for the position unit: cm from the left wall, or % of the image width when no enclosure width is set | config → `{enclosure_width, position_unit, position_max}` |
 | `FillTemplate` | Fills `{{key}}` in a file from `prompts/` | file name, values → text |
 | `GeneratePrompts` | Builds the lizard's prompt chunk for a range: context + one IMAGES chunk per 60 images (1/min); writes a bundle with `manifest.json` | mode, id, start, end (ISO) → manifest |
 | `SendPrompt` | Sends a bundle to `PROVIDER` (Mock until Q11), appends the answer to `analyses.json` | mode, id, bundle id → analysis entry |
@@ -87,10 +90,12 @@ Every function that touches lizard data takes `mode` first: `toy` or `main`, eac
 |---|---|
 | `mode` | The data set on screen: Toy or Main in dev mode, always Main otherwise |
 | `loadMode` | Loads the current mode's media and lizards and redraws everything |
-| `setView` | Switches the dashboard between Full and Compact view |
+| `toggleExpand` | Opens a lizard from compact to full width, or closes it |
+| `positionScale` | Client-side twin of `PositionScale`: the position chart's unit and maximum |
 | `simNow` | The dashboard clock in ms: real time, or the dev-mode clock (speed, set moment, pause) |
 | `syncVideo` | Keeps the camera video at the moment matching the clock; loops like a live feed |
 | `readSeries` | Client-side twin of `ReadSensor` |
 | `renderSensorCharts` | Temperature and humidity graphs, window growing to 5 days then sliding |
 | `renderPositionChart` | Position (cm from the left wall) from the latest analysis' Movement Data |
+| `uploadWithProgress` | Uploads a file with a progress callback (XMLHttpRequest, since fetch can't report upload progress) |
 | `showBundle` | The dev-mode prompt inspector: system prompt, schema, context chunk, each IMAGES chunk with its PDF and frames |
