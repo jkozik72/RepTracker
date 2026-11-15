@@ -23,3 +23,11 @@ Entry format:
 - **Consequences:** Every fact in `docs/` traces to a note or is `TBD`. A design choice is one entry here, not a document. Approaches and functions each have one place. `/digest` files sources; `/tasks` finds what is open. Nothing checks this automatically; review does.
 - **Sources:** The HydroScout repository (`CLAUDE.md`, `docs/notes/_template.md`, `docs/project/decisions.md`, `prototypes/README.md`, `.claude/skills/digest/SKILL.md`) as the model.
 - **Replaces:** none
+
+## D2 (2026-11-14): Keep Hack The Nest material in its own folder, `docs/hackathon/`
+- **Context:** The team asked for the Hack The Nest (Nov 14–15, 2026) tracks and opportunities to be written down before the project is described, so the two can be compared later without bias.
+- **Options:** A: fold the tracks into `overview.md`. B: keep only the note in `docs/notes/`. C: a separate `docs/hackathon/` folder built from the note, with an empty comparison page.
+- **Chose:** C, because the facts are about the event, not the project, and a separate folder with `project-fit.md` keeps the comparison explicit.
+- **Consequences:** `docs/hackathon/` follows the same editing rules as the other synthesized docs. Its analysis blocks are labelled as not official. Which tracks to enter stays open (Q6).
+- **Sources:** docs/notes/2026-11-14-hack-the-nest-research-report.md
+- **Replaces:** none

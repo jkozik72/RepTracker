@@ -12,6 +12,7 @@ A motion-tracking project. What RepTracker tracks, for whom, and on what input i
 - [Functions](docs/functions.md): naming conventions, glossary, function reference
 - [Decisions](docs/decisions.md): why things are the way they are
 - [Open questions](docs/open-questions.md)
+- [Hackathon](docs/hackathon/): Hack The Nest 2026 tracks and opportunities, to compare with the project
 - [Experiments](experiments/): quick spikes and their results
 
 ## How this repo is organized
