@@ -16,6 +16,7 @@ import io
 import json
 import math
 import re
+import secrets
 import shutil
 import statistics
 import subprocess
@@ -40,6 +41,7 @@ AI_SETTINGS = DATA / "ai-settings.json"   # which AI provider this computer uses
 MODES = ["toy", "main"]
 CAMERA_VIEWS = ["top", "side"]
 SIDES = ["left", "right"]
+SEXES = ["unknown", "male", "female"]
 TEMP_UNITS = ["F", "C"]
 HUMIDITY_UNITS = ["%RH", "g/m3"]
 IMAGES_PER_CHUNK = 60          # 1 image per minute -> one PDF per hour of range
@@ -240,7 +242,9 @@ def ProfileBrief(species):
     return {"slug": record["slug"], "commonName": p["commonName"], "temperaturesF": p["temperaturesF"],
             "humidityPercent": p["humidityPercent"],
             "trackedStats": [{k: s[k] for k in ("id", "label", "options", "concernOptions")} for s in p.get("trackedStats", [])],
-            "conditions": {c["name"]: c["urgency"] for c in p.get("conditions", [])}}
+            "conditions": {c["name"]: c["urgency"] for c in p.get("conditions", []) + research.SexConditions(p, "unknown")},
+            "feeding": p.get("feeding", []), "activityPattern": p.get("activityPattern"),
+            "sexNotes": p.get("sexNotes")}
 
 
 def ListLizards(mode):
@@ -253,8 +257,10 @@ def ListLizards(mode):
         if config is None:
             continue  # listed but never configured
         analyses = ReadJson(folder / "analyses.json", [])
+        feedings = ReadJson(folder / "feedings.json", [])
         lizards.append({"id": lizardId, "config": config, "latest": analyses[-1] if analyses else None,
-                        "profile": ProfileBrief(config["species"])})
+                        "profile": ProfileBrief(config["species"]), "feedings": feedings[-50:],
+                        "notifications": Notifications(analyses, feedings)})
     return lizards
 
 
@@ -309,6 +315,7 @@ def LizardConfigFromForm(mode, formData, createdAt):
     return {
         "name": name,
         "species": _Species(formData.get("species")),
+        "sex": _Choice(formData.get("sex") or "unknown", SEXES, "Sex"),
         "enclosureWidthCm": width,
         "createdAt": createdAt,
         "camera": {
@@ -542,14 +549,15 @@ def GeneratePrompts(mode, lizardId, startIso, endIso, imageCount=None):
 
     # The answer format for this animal: the base format with its species' activities, checks and conditions
     base = json.loads((PROMPTS / "response-schema.json").read_text(encoding="utf-8"))
-    schema = json.dumps(research.BuildResponseSchema(base, research.FindRecord(config["species"])), indent=2, ensure_ascii=False)
+    sex = config.get("sex", "unknown")
+    schema = json.dumps(research.BuildResponseSchema(base, research.FindRecord(config["species"]), sex), indent=2, ensure_ascii=False)
     (folder / "system.txt").write_text(FillTemplate("system.txt", {**common, "response_schema": schema}), encoding="utf-8")
     (folder / "response-schema.json").write_text(schema, encoding="utf-8")
 
     analyses = ReadJson(LizardFolder(mode, lizardId) / "analyses.json", [])
     previous = analyses[-1]["result"].get("Analysis", "") if analyses else "None yet."
     profile = research.FindRecord(config["species"])
-    researchText = research.PromptText(profile) if profile else ""
+    researchText = research.PromptText(profile, config.get("sex", "unknown")) if profile else ""
     context = FillTemplate("context-chunk.txt", {
         **common,
         "range_start": LabelTime(start), "range_end": LabelTime(end), "range_minutes": round(minutes),
@@ -557,6 +565,8 @@ def GeneratePrompts(mode, lizardId, startIso, endIso, imageCount=None):
         "species_file": f"{profile['slug']}/profile.json" if profile else "no profile yet",
         "research": researchText or "None yet. (A profile can be created on the Research tab.)",
         "previous_analysis": previous,
+        "sex": config.get("sex", "unknown"),
+        "feeding": FeedingContext(mode, lizardId, end),
     })
     (folder / "context.txt").write_text(context, encoding="utf-8")
 
@@ -663,6 +673,8 @@ def MockProvider(folder, manifest, config):
         "Droppings seen": last("Droppings seen", "can't tell"),
         "Food in bowl": "no bowl visible",
         "Conditions seen": [],
+        "Notable moments": ([{"time": movement[0]["time"], "note": "[Mock] Moved across the enclosure."}]
+                            if seen and max(seen) - min(seen) > 0.25 * width else []),
         "Hazardous conditions": {"Improper substrate": False, "Unsafe lighting": False, "Temperature too high": False,
                                  "Temperature too low": False, "Humidity too high": False, "Other": "none"},
         "Movement Data": movement,
@@ -785,7 +797,7 @@ def SendPrompt(mode, lizardId, bundleId):
     provider = CurrentProvider()
     result = PROVIDERS[provider](folder, manifest, config)
     details = result.pop("_details", None) or {}
-    entry = {"bundleId": bundleId, "provider": provider,
+    entry = {"bundleId": bundleId, "provider": provider, "imageSpacingS": manifest.get("imageSpacingS"),
              **{key: details[key] for key in DETAIL_KEYS if key in details}, "range": manifest["range"],
              "sentAt": FormatTime(datetime.now(timezone.utc)), "result": result}
     path = LizardFolder(mode, lizardId) / "analyses.json"
@@ -868,6 +880,10 @@ def MockResearch(prompt, schema):
         "bodyCondition": {"healthy": "Mock value.", "underweight": "Mock value.", "overweight": "Mock value."},
         "conditions": [{"name": "Example condition (Mock)", "visibleSigns": ["mock sign"], "urgency": "monitor", "notes": "Mock value."}],
         "hazards": [{"name": "Example hazard (Mock)", "description": "Mock value."}],
+        "sexNotes": {"howToTell": "Mock value.",
+                     "male": {"notes": "Mock value.", "conditions": []},
+                     "female": {"notes": "Mock value.", "conditions": [{"name": "Egg binding (Mock)", "visibleSigns": ["mock sign"],
+                                                                         "urgency": "vet soon", "notes": "Mock value."}]}},
         "husbandryNotes": "Mock value.", "confidence": "None: this is a Mock placeholder.",
     }, {"model": "mock"})
 
@@ -947,9 +963,124 @@ def UpdateProfile(slug, profile):
     return GetProfile(slug)
 
 
+def GenerateSensors(mode, slug, pattern):
+    """Dev mode: write four sensor files for this mode from a profile's ranges (see research.SENSOR_PATTERNS).
+    Re-generating the same pattern replaces its files."""
+    record = GetProfile(slug)
+    files = _ResearchCall(research.SensorSet, record, pattern)
+    folder = SensorsDir(mode)
+    folder.mkdir(parents=True, exist_ok=True)
+    for name, series in files.items():
+        (folder / f"{name}.json").write_text(json.dumps(series), encoding="utf-8")
+    LoadSeries.cache_clear()
+    return {"names": list(files), "pattern": pattern, "media": ListMedia(mode)}
+
+
 def DeleteProfile(slug):
     folder = _ResearchCall(research.Folder, slug)
     if not (folder / "profile.json").exists():
         raise RepTrackerError("Unknown species profile.")
     shutil.rmtree(folder)
     return ListProfiles()
+
+
+# ---------- feeding log (Feeding section; entries added in dev mode) ----------
+
+def _FeedingPath(mode, lizardId):
+    return LizardFolder(mode, lizardId) / "feedings.json"
+
+
+def AddFeeding(mode, lizardId, form):
+    """Log a feeding: when, what, how much, notes. Kept in reptiles/<id>/feedings.json, oldest first."""
+    LoadConfig(mode, lizardId)
+    when = FormatTime(ParseTime(form.get("time") or FormatTime(datetime.now(timezone.utc))))
+    food = " ".join(str(form.get("food") or "").split())[:80]
+    if not food:
+        raise RepTrackerError("Feeding: say what was fed (for example \"3 crickets\").")
+    entry = {"id": secrets.token_hex(6), "time": when, "food": food,
+             "amount": " ".join(str(form.get("amount") or "").split())[:40],
+             "notes": " ".join(str(form.get("notes") or "").split())[:200]}
+    path = _FeedingPath(mode, lizardId)
+    feedings = ReadJson(path, [])
+    feedings.append(entry)
+    feedings.sort(key=lambda f: f["time"])
+    WriteJson(path, feedings)
+    return feedings
+
+
+def DeleteFeeding(mode, lizardId, feedingId):
+    path = _FeedingPath(mode, lizardId)
+    feedings = [f for f in ReadJson(path, []) if f["id"] != feedingId]
+    WriteJson(path, feedings)
+    return feedings
+
+
+def FeedingContext(mode, lizardId, end):
+    """The feeding log as the AI sees it, relative to the end of the analysed range."""
+    feedings = [f for f in ReadJson(_FeedingPath(mode, lizardId), []) if ParseTime(f["time"]) <= end]
+    if not feedings:
+        return "No feedings logged."
+    last = feedings[-1]
+    days = (end - ParseTime(last["time"])).total_seconds() / 86400
+    recent = "; ".join(f"{LabelTime(ParseTime(f['time']))}: {f['food']}{(' ' + f['amount']) if f['amount'] else ''}" for f in feedings[-5:])
+    return f"Last fed {days:.1f} days before the end of this range. Recent feedings: {recent}."
+
+
+# ---------- notifications (neutral: neither good nor bad) ----------
+
+def _LabelIso(label, fallback):
+    try:
+        return FormatTime(datetime.strptime(str(label)[:16], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc))
+    except ValueError:
+        return fallback
+
+
+def Notifications(analyses, feedings, limit=40):
+    """What happened, newest first: the AI's notable moments, eating and droppings seen, changes between
+    analyses (activity, species checks), and logged feedings. Alerts (concerns) are separate."""
+    out, previous = [], None
+    for a in analyses:
+        r, end = a.get("result", {}), a["range"]["end"]
+        for m in r.get("Notable moments") or []:
+            if m.get("note"):
+                out.append({"time": _LabelIso(m.get("time"), end), "text": m["note"], "kind": "ai"})
+        if r.get("Eating seen") == "eating":
+            out.append({"time": end, "text": "Seen eating.", "kind": "event"})
+        if r.get("Droppings seen") == "new droppings":
+            out.append({"time": end, "text": "New droppings seen.", "kind": "event"})
+        if previous:
+            unknown = lambda v: not v or "can't" in str(v)
+            was, now = previous.get("Current activity"), r.get("Current activity")
+            if now != was and not unknown(now) and not unknown(was):
+                out.append({"time": end, "text": f"Activity: {now} (was {was}).", "kind": "change"})
+            for check, value in (r.get("Species checks") or {}).items():
+                old = (previous.get("Species checks") or {}).get(check)
+                if value != old and not unknown(value) and not unknown(old):
+                    out.append({"time": end, "text": f"{check.replace('_', ' ').capitalize()}: {value} (was {old}).", "kind": "change", "check": check})
+        previous = r
+    for f in feedings:
+        out.append({"time": f["time"], "text": f"Fed: {f['food']}{(' (' + f['amount'] + ')') if f['amount'] else ''}.", "kind": "feeding"})
+    out.sort(key=lambda n: n["time"], reverse=True)
+    return out[:limit]
+
+
+# ---------- movement (Movement section) ----------
+
+def MovementData(mode, lizardId):
+    """Every analysed position of an animal, oldest first: [{t, p, w}] with p None when not visible and
+    w the seconds each image stands for (its analysis' image spacing). Overlapping analyses: the newest wins."""
+    config = LoadConfig(mode, lizardId)
+    byTime = {}
+    for a in ReadJson(LizardFolder(mode, lizardId) / "analyses.json", []):
+        movement = a.get("result", {}).get("Movement Data") or []
+        times = [_LabelIso(m.get("time"), None) for m in movement]
+        spacing = a.get("imageSpacingS")
+        if not spacing:
+            gaps = sorted((ParseTime(b) - ParseTime(t)).total_seconds() for t, b in zip(times, times[1:]) if t and b)
+            spacing = gaps[len(gaps) // 2] if gaps else 60
+        for t, m in zip(times, movement):
+            if t:
+                byTime[t] = {"t": t, "p": m.get("position", m.get("position_cm")), "w": spacing}
+    return {"points": [byTime[t] for t in sorted(byTime)], "positionMax": config.get("enclosureWidthCm") or 100,
+            "unit": "cm" if config.get("enclosureWidthCm") else "%", "hotSide": config["sensors"]["hotSide"]}
+

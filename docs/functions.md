@@ -72,6 +72,11 @@ Every function that touches lizard data takes `mode` first: `toy` or `main`, eac
 | `ProfileBrief` | A lizard's species profile as the dashboard needs it: name and the ranges for sensor alerts | species text → dict or None |
 | `CreateProfile` | Researches a species with the provider in use (`RESEARCHERS`), checks the reply, fetches photos, saves it; refuses a duplicate unless regenerating | species, regenerate → record with `usedBy` |
 | `UpdateProfile` / `DeleteProfile` / `GetProfile` / `ListProfiles` | A keeper's edit (marks it checked); delete with its photos; one profile; all profiles, each with the animals that use it | |
+| `AddFeeding` / `DeleteFeeding` | The feeding log (`reptiles/<id>/feedings.json`, time order): when, food, amount, notes | |
+| `FeedingContext` | The feeding log as the AI sees it, relative to the end of the analysed range | mode, id, end → text |
+| `Notifications` | Neutral events, newest first: AI notable moments, eating, droppings, changes between analyses, feedings | analyses, feedings → list |
+| `MovementData` | Every analysed position of an animal with the seconds each image stands for | mode, id → `{points: [{t, p, w}], positionMax, unit, hotSide}` |
+| `GenerateSensors` | Dev mode: four sensor files for a mode from a profile's ranges and a pattern | mode, slug, pattern → names |
 | `RemoveLizard` | Takes a lizard off `reptiles.json`; its folder stays | mode, id → none |
 | `ListLizards` | Every listed lizard with its config and latest analysis | mode → list |
 | `ListMedia` | Video and sensor file names without extension; sensors include the defaults | mode → `{videos, sensors, defaultSensors}` |
@@ -138,8 +143,22 @@ Species profiles (D5): storage, schema checks, photos and prompt text. No AI cal
 | `FetchImages` | Up to 6 reference photos from Wikimedia Commons (search by scientific name), saved with author, licence and source; never raises | record → (images, note) |
 | `CleanTrackedStats` | Species checks the dashboard can use: unique snake_case ids, 2+ options, concern options that are real options, "can't see animal" last; at most 6 | stats, notes → stats |
 | `BuildResponseSchema` | The answer format for one animal: the base `response-schema.json` with the species' activities, checks and named conditions; base as is without a profile | base schema, record → schema |
+| `SensorSeries` / `SensorSet` | A sensor series for a range and a pattern (in-bounds, under, over, variance); the four series for a profile | |
+| `SexConditions` | Sex-specific conditions for an animal: its sex's, or both when unknown | profile, sex → list |
 | `PromptText` | The profile as plain text for the CONTEXT chunk | record → text |
 | `Summary` | What the Research list shows for a profile | record → dict |
+
+### `src/website/auth.py`
+
+Sign-in (D7). Files: `data/auth.json` (account, password hash), `data/secret_key` (cookie signing), `data/tls/` (LAN certificate); all git-ignored.
+
+| Function | Does | In → out |
+|---|---|---|
+| `AccountExists` / `AccountId` | Whether the one account exists; its random id (sessions are tied to it) | → bool / id or None |
+| `CreateAccount` | The first visit's account: username 3 to 40, password 10+ and confirmed, stored as a scrypt hash; refused once one exists | username, password, confirm → (username, id) |
+| `CheckLogin` | Checks a sign-in; repeated wrong passwords lock that address out (30 s doubling to 15 min) | username, password, address → (username, id) |
+| `SecretKey` | The cookie signing key, made once | → text |
+| `Certificate` / `LanAddresses` | A self-signed certificate for this computer's names and LAN addresses, made once; the addresses | → (cert, key paths) / list |
 
 ### `src/website/claude_ai.py`
 
@@ -180,6 +199,10 @@ The Claude provider (D4): the Claude API through the `anthropic` package, import
 | `nameScore` / `editDistance` | How far a typed name is from a known one: edit distance with swapped letters as one edit, word by word, prefixes, and a single word matching part of a name (a group such as "gecko") | |
 | `findProfile` | The profile for a typed species, matched like the server (typed, common or scientific name); the add/edit form researches the species first when there is none | species text → profile summary or undefined |
 | `speciesHint` | Under the species field: whether the typed species has a profile | |
+| `section` | A collapsible card section; which are open is remembered per animal | |
+| `renderMovement` / `barChart` / `zoneOf` | The Movement section: time on each side (all, day, night), movement per interval, by hour of day; bar charts; which third a position is in | |
+| `feedingStatus` | Days since the last feeding (dashboard clock) and Fed / Due / Overdue from the profile | animal → status or null |
+| `noteText` | A notification's text with species check labels from the profile | |
 | `toggleExpand` | Opens a lizard from compact to full width, or closes it |
 | `positionScale` | Client-side twin of `PositionScale`: the position chart's unit and maximum |
 | `loadAi` | Loads the AI provider status on its own, so a slow check never delays the lizards: at start, when Settings opens, after a test or a refused switch |

@@ -23,6 +23,7 @@
     "trackedStats",
     "bodyCondition",
     "conditions",
+    "sexNotes",
     "hazards",
     "husbandryNotes",
     "confidence"
@@ -270,34 +271,63 @@
       "type": "array",
       "description": "common diseases and health problems of this species in captivity",
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "name",
-          "visibleSigns",
-          "urgency",
-          "notes"
-        ],
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "visibleSigns": {
-            "type": "array",
-            "items": {
-              "type": "string"
+        "$ref": "#/$defs/condition"
+      }
+    },
+    "sexNotes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "howToTell",
+        "male",
+        "female"
+      ],
+      "description": "differences between the sexes",
+      "properties": {
+        "howToTell": {
+          "type": "string",
+          "description": "how a keeper can tell males from females, and from what age"
+        },
+        "male": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "notes",
+            "conditions"
+          ],
+          "properties": {
+            "notes": {
+              "type": "string",
+              "description": "care and behaviour specific to this sex"
             },
-            "description": "signs a camera could show"
-          },
-          "urgency": {
-            "enum": [
-              "monitor",
-              "vet soon",
-              "emergency"
-            ]
-          },
-          "notes": {
-            "type": "string"
+            "conditions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/condition"
+              },
+              "description": "health problems specific to this sex, with visible signs"
+            }
+          }
+        },
+        "female": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "notes",
+            "conditions"
+          ],
+          "properties": {
+            "notes": {
+              "type": "string",
+              "description": "care and behaviour specific to this sex"
+            },
+            "conditions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/condition"
+              },
+              "description": "health problems specific to this sex, with visible signs"
+            }
           }
         }
       }
@@ -344,6 +374,38 @@
         },
         "max": {
           "type": "number"
+        }
+      }
+    },
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "visibleSigns",
+        "urgency",
+        "notes"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "visibleSigns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "signs a camera could show"
+        },
+        "urgency": {
+          "enum": [
+            "monitor",
+            "vet soon",
+            "emergency"
+          ]
+        },
+        "notes": {
+          "type": "string"
         }
       }
     }

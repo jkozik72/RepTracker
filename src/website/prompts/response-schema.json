@@ -13,6 +13,7 @@
     "Food in bowl",
     "Species checks",
     "Conditions seen",
+    "Notable moments",
     "Hazardous conditions",
     "Movement Data",
     "Analysis"
@@ -105,6 +106,28 @@
           "signs": {
             "type": "string",
             "description": "what was seen, and in which images"
+          }
+        }
+      }
+    },
+    "Notable moments": {
+      "type": "array",
+      "description": "interesting moments that are neither good nor bad, for the keeper's notifications: for example started shedding, very active, drank, dug, came out of the hide; an empty list if nothing",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "time",
+          "note"
+        ],
+        "properties": {
+          "time": {
+            "type": "string",
+            "description": "the image's timestamp label"
+          },
+          "note": {
+            "type": "string",
+            "description": "one short sentence"
           }
         }
       }

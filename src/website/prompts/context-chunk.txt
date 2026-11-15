@@ -3,6 +3,7 @@ CONTEXT for {{name}}
 Animal
 - Name: {{name}}
 - Species: {{species}}
+- Sex: {{sex}}
 - Enclosure width: {{enclosure_width}}
 - Position unit: {{position_unit}} (0 to {{position_max}})
 - Camera: {{camera_view}} view
@@ -15,6 +16,9 @@ Sensor readings over the range (min / mean / max / latest)
 
 Species reference (research/{{species_file}})
 {{research}}
+
+Feeding (from the keeper's log)
+{{feeding}}
 
 Previous analysis
 {{previous_analysis}}

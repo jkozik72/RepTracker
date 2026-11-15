@@ -229,9 +229,66 @@ def FetchImages(record):
     return images, note
 
 
+# ---------- sensor data from a profile (dev mode) ----------
+
+SENSOR_PATTERNS = {
+    "in-bounds": "In bounds: a gentle day/night swing inside the ranges",
+    "under": "Goes under: in bounds, with stretches of several hours below the range",
+    "over": "Goes over: in bounds, with stretches of several hours above the range",
+    "variance": "High variance: centred, but noisy enough to cross both edges often",
+}
+
+
+def SensorSeries(lo, hi, pattern, days=7, stepS=300, seed=0, bias=0.0):
+    """A finite sensor series {"t": ms, "value": [...]} for a range [lo, hi].
+
+    bias moves the centre inside the range (-1 = at lo, +1 = at hi); the hot side's humidity uses -0.3.
+    """
+    import math
+    import random
+    rnd = random.Random(seed)
+    half, mid = (hi - lo) / 2 or 1.0, (lo + hi) / 2
+    centre = mid + bias * half * 0.6
+    n = int(days * 86400 / stepS)
+    # stretches out of range for "under"/"over": three windows of 3 to 8 h, at random points
+    windows = [(start, start + rnd.uniform(3, 8) * 3600) for start in sorted(rnd.uniform(0.5, days - 0.5) * 86400 for _ in range(3))]
+    values = []
+    for k in range(n):
+        t = k * stepS
+        daily = math.sin(2 * math.pi * (t / 86400 - 0.25))
+        if pattern == "variance":
+            v = centre + daily * half * 0.4 + rnd.gauss(0, half * 0.9)
+        else:
+            v = centre + daily * half * 0.35 + rnd.gauss(0, half * 0.08)
+            v = min(max(v, lo + half * 0.05), hi - half * 0.05)     # in bounds, with a small margin
+            for a, b in windows:
+                if pattern in ("under", "over") and a <= t <= b:
+                    # ramp out and back over the window, peaking at 30-60 % of the range past the edge
+                    depth = math.sin(math.pi * (t - a) / (b - a)) * half * rnd.uniform(0.6, 1.2)
+                    v = (lo - depth * 0.5) if pattern == "under" else (hi + depth * 0.5)
+                    v += rnd.gauss(0, half * 0.05)
+        values.append(round(v, 1))
+    return {"t": stepS * 1000, "value": values}
+
+
+def SensorSet(record, pattern):
+    """Four sensor series for a profile and a pattern: {name: series}. Temperatures in degrees F, humidity in % RH."""
+    if pattern not in SENSOR_PATTERNS:
+        raise ResearchError(f"Unknown pattern. Choose one of: {', '.join(SENSOR_PATTERNS)}.")
+    p, slug = record["profile"], record["slug"]
+    t, h = p["temperaturesF"], p["humidityPercent"]
+    seed = sum(map(ord, slug + pattern))
+    return {
+        f"{slug}-{pattern}-hot-temp-f": SensorSeries(t["hotSide"]["min"], t["hotSide"]["max"], pattern, seed=seed + 1),
+        f"{slug}-{pattern}-cold-temp-f": SensorSeries(t["coldSide"]["min"], t["coldSide"]["max"], pattern, seed=seed + 2),
+        f"{slug}-{pattern}-hot-humidity-rh": SensorSeries(h["min"], h["max"], pattern, seed=seed + 3, bias=-0.3),
+        f"{slug}-{pattern}-cold-humidity-rh": SensorSeries(h["min"], h["max"], pattern, seed=seed + 4, bias=0.3),
+    }
+
+
 # ---------- the answer format for one animal ----------
 
-def BuildResponseSchema(base, record):
+def BuildResponseSchema(base, record, sex="unknown"):
     """prompts/response-schema.json for one animal: the species' activities, checks and named conditions.
 
     Without a profile the base format is used as is (its default check is shed). A profile with no checks
@@ -257,11 +314,18 @@ def BuildResponseSchema(base, record):
     else:
         del props["Species checks"]
         schema["required"].remove("Species checks")
-    names = [c["name"] for c in p.get("conditions", []) if c.get("name")]
+    names = [c["name"] for c in p.get("conditions", []) + SexConditions(p, sex) if c.get("name")]
     if names:
         props["Conditions seen"]["items"]["properties"]["name"] = {"enum": list(dict.fromkeys(names + ["other"])),
                                                                    "description": "a condition from the species profile, or other"}
     return schema
+
+
+def SexConditions(p, sex):
+    """Sex-specific conditions for an animal: its own sex's, or both when the sex is unknown."""
+    notes = p.get("sexNotes") or {}
+    sexes = [sex] if sex in ("male", "female") else ["male", "female"]
+    return [c for s in sexes for c in (notes.get(s) or {}).get("conditions", [])]
 
 
 # ---------- the profile in an analysis prompt ----------
@@ -272,7 +336,7 @@ def _R(r, unit=""):
     return f"{fmt(lo)}{unit}" if lo == hi else f"{fmt(lo)}-{fmt(hi)}{unit}"
 
 
-def PromptText(record):
+def PromptText(record, sex="unknown"):
     """The profile as plain text for the CONTEXT chunk of an analysis."""
     p = record["profile"]
     t = p["temperaturesF"]
@@ -296,6 +360,14 @@ def PromptText(record):
         "Hazards:",
         *[f"- {h['name']}: {h['description']}" for h in p["hazards"]],
     ]
+    notes = p.get("sexNotes")
+    if notes:
+        lines.append(f"Telling the sexes apart: {notes['howToTell']}")
+        for s in ([sex] if sex in ("male", "female") else ["male", "female"]):
+            part = notes.get(s) or {}
+            if part.get("notes"):
+                lines.append(f"{s.capitalize()}s: {part['notes']}")
+            lines += [f"- {c['name']} ({s}) [{c['urgency']}]: {'; '.join(c['visibleSigns'])}" for c in part.get("conditions", [])]
     if record.get("edited"):
         lines.append("(This profile was checked and edited by the keeper.)")
     return "\n".join(line for line in lines if line)
