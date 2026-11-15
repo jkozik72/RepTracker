@@ -289,9 +289,9 @@
     <div class="lizards" id="lizards"></div>
 
     <div class="add-row">
-      <button class="add-btn" id="add-btn" type="button">+ Add lizard</button>
+      <button class="add-btn" id="add-btn" type="button">+ Add animal</button>
       <form class="card add-form" id="add-form" hidden novalidate>
-        <h3 class="full" id="form-title" style="margin:0">Add a lizard</h3>
+        <h3 class="full" id="form-title" style="margin:0">Add an animal</h3>
         <div>
           <label for="f-name">Name</label>
           <input id="f-name" name="name" required maxlength="40" placeholder="e.g. Cheeto">
@@ -367,7 +367,7 @@
         <div class="full form-actions">
           <p class="error" id="add-error" hidden style="margin:0 auto 0 0"></p>
           <button class="btn" type="button" id="add-cancel">Cancel</button>
-          <button class="btn primary" type="submit" id="form-submit">Create lizard</button>
+          <button class="btn primary" type="submit" id="form-submit">Create animal</button>
         </div>
       </form>
     </div>
@@ -394,17 +394,17 @@
       <div>
         <h2>AI polling</h2>
         <div class="poll-row">
-          <label for="poll-interval" style="margin:0">Analyse each lizard</label>
+          <label for="poll-interval" style="margin:0">Analyse each animal</label>
           <select id="poll-interval"></select>
           <label for="poll-images" style="margin:0">with</label>
           <select id="poll-images" title="How many camera images each analysis sends, spread evenly over the interval"></select>
           <button class="btn primary" type="button" id="poll-toggle">Start</button>
         </div>
         <p class="hint" id="poll-state">Stopped.</p>
-        <p class="hint">At each interval mark of the dashboard clock, every lizard on the dashboard is analysed for the interval that just ended, with the AI provider in use. Runs while this page is open, and is stopped whenever the page loads. With the dev clock sped up, intervals (and calls) come faster. A real provider bills every call.</p>
+        <p class="hint">At each interval mark of the dashboard clock, every animal on the dashboard is analysed for the interval that just ended, with the AI provider in use. Runs while this page is open, and is stopped whenever the page loads. With the dev clock sped up, intervals (and calls) come faster. A real provider bills every call.</p>
       </div>
       <label class="check"><input type="checkbox" id="dev-mode">
-        <span><strong>Dev mode</strong><br><span class="hint" style="margin:0">Clock controls above the alerts (speed, set time, pause, resume), a prompt inspector on each lizard, Toy / Main data, and uploads.</span></span>
+        <span><strong>Dev mode</strong><br><span class="hint" style="margin:0">Clock controls above the alerts (speed, set time, pause, resume), a prompt inspector on each animal, Toy / Main data, and uploads.</span></span>
       </label>
 
       <div class="dev-settings" id="dev-settings" hidden>
@@ -414,7 +414,7 @@
             <button type="button" data-mode="toy">Toy mode</button>
             <button type="button" data-mode="main">Main mode</button>
           </div>
-          <p class="hint"><strong>Toy</strong>: sample lizards, videos and sensors. <strong>Main</strong>: starts empty; upload media and add your lizards. With dev mode off, the dashboard shows Main.</p>
+          <p class="hint"><strong>Toy</strong>: sample animals, videos and sensors. <strong>Main</strong>: starts empty; upload media and add your animals. With dev mode off, the dashboard shows Main.</p>
         </div>
 
         <div id="ai-settings">
@@ -434,7 +434,7 @@
             <input type="file" name="file" accept="video/mp4,.mp4" multiple required aria-label="Video files (.mp4)">
             <button class="btn primary" type="submit">Upload</button>
           </form>
-          <p class="hint">One or more .mp4 files, up to 3 GB each. Each shows up in the add-lizard Camera dropdown under its file name without “.mp4”.</p>
+          <p class="hint">One or more .mp4 files, up to 3 GB each. Each shows up in the add-animal Camera dropdown under its file name without “.mp4”.</p>
           <progress data-upload-progress max="100" value="0" hidden></progress>
           <p class="error" data-upload-error hidden></p><p class="ok-msg" data-upload-ok hidden></p>
           <ul class="file-list" data-file-list="videos"></ul>
@@ -446,7 +446,7 @@
             <input type="file" name="file" accept="application/json,.json" multiple required aria-label="Sensor files (.json)">
             <button class="btn primary" type="submit">Upload</button>
           </form>
-          <p class="hint">A .json file: <code>{"t": 300000, "value": [86.8, 86.9, …]}</code>. <code>t</code> is the time between samples in ms; <code>value</code> is the samples. The series starts when a lizard is added and loops. Units are set per lizard. <strong>Default</strong> files are built in and available in every mode.</p>
+          <p class="hint">A .json file: <code>{"t": 300000, "value": [86.8, 86.9, …]}</code>. <code>t</code> is the time between samples in ms; <code>value</code> is the samples. The series starts when an animal is added and loops. Units are set per animal. <strong>Default</strong> files are built in and available in every mode.</p>
           <progress data-upload-progress max="100" value="0" hidden></progress>
           <p class="error" data-upload-error hidden></p><p class="ok-msg" data-upload-ok hidden></p>
           <ul class="file-list" data-file-list="sensors"></ul>
@@ -586,10 +586,27 @@ function channels(config) {
 /* ================= Alerts & status ================= */
 // Live sensor alerts, from each lizard's readings and its species profile ranges (filled in by checkSensorRanges)
 const sensorAlerts = {};
+// The species check for an id: from the profile, or a plain label for an analysis made before the profile changed
+function checkInfo(l, id) {
+  const s = (l.profile?.trackedStats || []).find(t => t.id === id);
+  return s || { id, label: id.replace(/_/g, " ").replace(/^./, c => c.toUpperCase()), concernOptions: id === "shed" ? ["stuck shed"] : [],
+                options: id === "shed" ? ["not shedding", "about to shed", "shedding", "stuck shed", "can't see animal"] : null };
+}
 function getAlerts(lizard) {
   const out = [...(sensorAlerts[lizard.id] || [])];
   const r = lizard.latest && lizard.latest.result;
   if (!r) return out;
+  // Species checks with a concerning answer, conditions the AI saw, and body condition
+  for (const [id, value] of Object.entries(r["Species checks"] || {})) {
+    const info = checkInfo(lizard, id);
+    if (info.concernOptions.includes(value)) out.push(`${info.label}: ${value}`);
+  }
+  for (const c of r["Conditions seen"] || []) {
+    const urgency = lizard.profile?.conditions?.[c.name];
+    out.push(`${c.name}${urgency ? ` (${urgency})` : ""}${c.signs ? `: ${c.signs}` : ""}`);
+  }
+  const body = (r["Body condition"] || "").toLowerCase();
+  if (body && body !== "healthy" && !body.includes("see")) out.push(`Body condition: ${body}`);
   for (const [k, v] of Object.entries(r["Hazardous conditions"] || {})) {
     if (v === true) out.push(k);
     else if (typeof v === "string" && v.trim() && v.toLowerCase() !== "none") out.push(`${k}: ${v}`);
@@ -601,27 +618,51 @@ function getAlerts(lizard) {
 function getStatus(lizard) {
   if (getAlerts(lizard).length) return "bad";
   if (!lizard.latest) return "none";
-  const shed = (lizard.latest.result.Shed || "").toLowerCase();
-  return shed === "now" || shed === "soon" ? "warn" : "ok";
+  const r = lizard.latest.result, shed = (r.Shed || "").toLowerCase();
+  if (shed === "now" || shed === "soon") return "warn";                     // analyses made before species profiles
+  // Watch: a species check that is neither its normal (first) answer nor a concern, e.g. "about to shed"
+  const watch = Object.entries(r["Species checks"] || {}).some(([id, v]) => {
+    const info = checkInfo(lizard, id);
+    return info.options && v !== info.options[0] && v !== "can't see animal" && !info.concernOptions.includes(v);
+  });
+  return watch ? "warn" : "ok";
 }
 const STATUS_LABEL = { ok: "Healthy", warn: "Watch", bad: "Alert", none: "Not analysed yet" };
 
 function renderSummary() {
   const el = $("#summary");
   if (!lizards.length) {
-    el.innerHTML = `<span class="summary-count">No lizards yet</span><span class="hint" style="margin:0">${mode() === "main" && !media.videos.length
-      ? "Main mode starts empty. Turn on dev mode in Settings to upload a camera video (default sensor files are built in), then add a lizard below."
+    el.innerHTML = `<span class="summary-count">No animals yet</span><span class="hint" style="margin:0">${mode() === "main" && !media.videos.length
+      ? "Main mode starts empty. Turn on dev mode in Settings to upload a camera video (default sensor files are built in), then add an animal below."
       : "Add one below to start tracking."}</span>`;
     return;
   }
   const alerts = lizards.flatMap(l => getAlerts(l).map(a => `${l.config.name}: ${a}`));
   el.innerHTML = `
-    <span class="summary-count">${lizards.length} lizard${lizards.length === 1 ? "" : "s"} · ${alerts.length ? `<span style="color:var(--bad)">${alerts.length} alert${alerts.length === 1 ? "" : "s"}</span>` : "no alerts"}</span>
+    <span class="summary-count">${lizards.length} animal${lizards.length === 1 ? "" : "s"} · ${alerts.length ? `<span style="color:var(--bad)">${alerts.length} alert${alerts.length === 1 ? "" : "s"}</span>` : "no alerts"}</span>
     <ul class="summary-list">${lizards.map(l => { const s = getStatus(l); return `<li><a href="#lizard-${l.id}" data-goto="${l.id}"><span class="pill ${s}">${esc(l.config.name)} · ${STATUS_LABEL[s]}</span></a></li>`; }).join("")}</ul>
     ${alerts.length ? `<ul class="summary-alerts">${alerts.map(a => `<li>${esc(a)}</li>`).join("")}</ul>` : ""}`;
 }
 
 /* ================= Lizard blocks ================= */
+// The AI part of the stats panel. New analyses: visible, activity, body condition, eating, droppings, food dish,
+// then the species checks from the profile. Older analyses still show their own fields (weight, shed).
+function aiStatsHtml(l) {
+  const r = l.latest ? l.latest.result : null;
+  const cell = (label, value, bad) => `<div class="stat"><dt>${esc(label)}</dt><dd class="cap${bad ? " out" : ""}">${esc(value ?? "—")}</dd></div>`;
+  if (r && !("Body condition" in r) && ("Weight" in r || "Shed" in r))     // made before species profiles
+    return cell("Current activity", r["Current activity"]) + cell("Weight", r.Weight) + cell("Shed", r.Shed) + cell("Food in bowl", r["Food in bowl"]);
+  const checks = l.profile?.trackedStats?.length ? l.profile.trackedStats.map(t => t.id) : Object.keys(r?.["Species checks"] || { shed: 0 });
+  const ids = [...new Set([...checks, ...Object.keys(r?.["Species checks"] || {})])];
+  const body = r?.["Body condition"];
+  return cell("Current activity", r?.["Current activity"])
+    + cell("Body condition", body, body && !["healthy", "can't see animal"].includes(body))
+    + cell("Eating", r?.["Eating seen"]) + cell("Droppings", r?.["Droppings seen"]) + cell("Visible", r?.["Animal visible"])
+    + cell("Food in bowl", r?.["Food in bowl"])
+    + ids.map(id => { const info = checkInfo(l, id), v = r?.["Species checks"]?.[id]; return cell(info.label, v, info.concernOptions.includes(v)); }).join("")
+    + ((r?.["Conditions seen"] || []).length ? `<div class="stat" style="grid-column:1/-1"><dt>Conditions seen</dt><dd class="out">${esc(r["Conditions seen"].map(c => c.name).join(", "))}</dd></div>` : "");
+}
+
 function renderVideoBox(c, fullscreen = false) {
   return `<div class="video">
       <video src="/media/${mode()}/videos/${encodeURIComponent(c.camera.video)}.mp4" muted playsinline preload="auto" data-video></video>
@@ -673,7 +714,6 @@ function toggleExpand(id, open = !expanded.has(id)) {
 function renderLizard(l) {
   if (!expanded.has(l.id)) return renderCompactLizard(l);
   const c = l.config, s = getStatus(l), r = l.latest ? l.latest.result : {};
-  const stat = k => `<dd class="cap">${esc(r[k] ?? "—")}</dd>`;
   const sensorStats = channels(c).map((ch, i) =>
     `<div class="stat ${ch.key}"><dt>${ch.key === "hot" ? "Hot" : "Cold"} (${ch.side}) ${ch.kind === "temperature" ? "temp" : "humidity"}</dt><dd data-sensor="${i}">—</dd></div>`).join("");
   const def = simNow();
@@ -691,13 +731,10 @@ function renderLizard(l) {
     <div>
       <h2>Stats</h2>
       <dl class="stats">
-        <div class="stat"><dt>Current activity</dt>${stat("Current activity")}</div>
-        <div class="stat"><dt>Weight</dt>${stat("Weight")}</div>
-        <div class="stat"><dt>Shed</dt>${stat("Shed")}</div>
-        <div class="stat"><dt>Food in bowl</dt>${stat("Food in bowl")}</div>
+        ${aiStatsHtml(l)}
         ${sensorStats}
       </dl>
-      <p class="hint">Temperature and humidity are live sensor readings; the rest is from the latest AI analysis.</p>
+      <p class="hint">Temperature and humidity are live sensor readings; the rest is from the latest AI analysis${l.profile ? `, with checks from the ${esc(l.profile.commonName)} profile` : ". Create a species profile on the Research tab for species-specific checks"}.</p>
     </div>
     <div class="panel analysis"><h2>AI analysis</h2>${renderAnalysis(l)}
       <form class="analyze-row" data-action="analyze">
@@ -751,7 +788,7 @@ function renderLizard(l) {
 
 function renderLizards() {
   const el = $("#lizards");
-  el.innerHTML = lizards.length ? lizards.map(renderLizard).join("") : `<div class="card empty">No lizards yet.</div>`;
+  el.innerHTML = lizards.length ? lizards.map(renderLizard).join("") : `<div class="card empty">No animals yet.</div>`;
   renderSummary();
   for (const l of lizards) channels(l.config).forEach(ch => loadSeries(ch.series));
   tick(true);
@@ -1146,7 +1183,7 @@ let editingId = null;
 function closeAdd() {
   $("#f-species-suggest").innerHTML = "";
   addForm.reset(); addErr.hidden = true; addForm.hidden = true; addBtn.hidden = false; $("#f-coldside").textContent = "Right";
-  editingId = null; $("#form-title").textContent = "Add a lizard"; $("#form-submit").textContent = "Create lizard";
+  editingId = null; $("#form-title").textContent = "Add an animal"; $("#form-submit").textContent = "Create animal";
 }
 function openEdit(l) {
   const c = l.config, f = addForm.elements;
@@ -1582,6 +1619,13 @@ function renderProfile(rec) {
       ${fact("Shedding", `${p.shedding.type}, about every ${rng(p.shedding.intervalDays, " days")}. ${p.shedding.signs}`)}
     </dl></div>
     <div><h2>What the camera can see</h2><div class="chips">${p.observableActivities.map(a => `<span class="pill none">${esc(a)}</span>`).join("")}</div></div>
+    <div><h2>Checked in every analysis</h2>
+      <p class="hint" style="margin:0 0 6px">Always: visible, activity (the list above), body condition, eating, droppings, food dish, hazards and the conditions below. Plus these checks for this species; red answers raise an alert on the dashboard.</p>
+      ${p.trackedStats?.length ? `<table class="ptable"><thead><tr><th>Check</th><th>What the AI looks for</th><th>Answers</th></tr></thead><tbody>
+        ${p.trackedStats.map(t => `<tr><td><strong>${esc(t.label)}</strong></td><td>${esc(t.question)}</td>
+          <td><div class="chips">${t.options.map(o => `<span class="pill ${t.concernOptions.includes(o) ? "bad" : o === t.options[0] ? "ok" : "none"}">${esc(o)}</span>`).join("")}</div></td></tr>`).join("")}
+      </tbody></table>` : `<p class="caution" style="margin:0">This profile has no species checks (it was made before they existed). Regenerate it to get them.</p>`}
+    </div>
     <div><h2>Body condition</h2><dl class="facts">${fact("Healthy", p.bodyCondition.healthy)}${fact("Underweight", p.bodyCondition.underweight)}${fact("Overweight", p.bodyCondition.overweight)}</dl></div>
     <div><h2>Conditions to watch for</h2><table class="ptable"><thead><tr><th>Condition</th><th>Visible signs</th><th>Urgency</th><th>Notes</th></tr></thead><tbody>
       ${p.conditions.map(c => `<tr><td><strong>${esc(c.name)}</strong></td><td><ul>${c.visibleSigns.map(v => `<li>${esc(v)}</li>`).join("")}</ul></td>

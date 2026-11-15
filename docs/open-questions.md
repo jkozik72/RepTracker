@@ -17,7 +17,6 @@ Every open question in one place. Add rows at the bottom with the next ID; never
 | Q15 | Which sensors, and what do their files look like: format, sample rate, length? | The add-lizard form selects them and the AI receives them. | "H, C" on the UI board, not spelled out. | [brief § Inputs][b-inputs] (s. 24); [UI board § Add lizard form][u-form], 2026-11-14 |
 | Q16 | Which videos do we use, and in what form: source, length, resolution, frame rate, top or side view, the JSON that lists the cameras? | Motion tracking is designed and tested on them. | One video filmed by the team; others found online. | [brief § Inputs][b-inputs] (s. 23); [board § Add lizard][s-add], 2026-11-14 |
 | Q17 | How does a finite video map onto dashboard time: played once, looped, sped up? | The movement graph is meant to show movement throughout the day, and the dashboard should look real-time. | TBD | [brief § Product][b-product] (s. 3), [§ Inputs][b-inputs] (s. 25–28), 2026-11-14 |
-| Q18 | Lizards only, or other reptiles too? | Research, statuses, and motion tracking depend on the animal. | The brief says "reptiles" once and "lizard" everywhere else. | [brief § Product][b-product] (s. 2), 2026-11-14 |
 | Q19 | What are "previous data" in the add-lizard form and "AI questions" on the dashboard? | Both are UI elements that no source describes. | TBD | [brief § Web app][b-web] (s. 21); [UI board § Dashboard][u-dash], [§ Add lizard form][u-form], 2026-11-14 |
 
 ## Answered
@@ -31,6 +30,7 @@ Every open question in one place. Add rows at the bottom with the next ID; never
 | Q11 | The Claude API, model `claude-opus-5-5` by default (`REPTRACKER_CLAUDE_MODEL` changes it), for image analysis and questions. It reads the PDFs of camera images, so it is used as a VLM. Research has no provider yet. Gemini and the Mock stay selectable. | [D4](decisions.md); [Claude chat][cl-chat] |
 | Q20 | An Anthropic API key, entered in Settings (dev mode) and kept on the computer that runs the app (`src/website/data/claude-key.json`, git-ignored), or the `ANTHROPIC_API_KEY` environment variable. Gemini keeps using the computer's Google login. | [D4](decisions.md); [Claude chat][cl-chat] |
 | Q14 | A species profile per species, written by the AI from the species typed in plain English: ranges, feeding, droppings, shedding, observable activities, body condition, conditions with visible signs, hazards (`prompts/profile-schema.json`). Stored in `src/website/research/<slug>/profile.json` with Wikimedia Commons photos; shown and editable on the Research tab; used in every analysis and for sensor alerts. | [D5](decisions.md); [species chat][sp-chat] |
+| Q18 | Any reptile or amphibian, called "animal". What is tracked comes from each species' profile: common stats for every animal plus species checks written at research time. | [D6](decisions.md); [checks chat][ck-chat] |
 
 [b-product]: notes/2026-11-14-project-brief.md#product
 [b-ai]: notes/2026-11-14-project-brief.md#research-and-image-analysis
@@ -48,3 +48,4 @@ Every open question in one place. Add rows at the bottom with the next ID; never
 [c-open]: notes/2026-11-14-dashboard-changes-chat.md#open-questions
 [cl-chat]: notes/2026-11-15-claude-provider-chat.md#key-points
 [sp-chat]: notes/2026-11-15-species-profiles-chat.md#key-points
+[ck-chat]: notes/2026-11-15-species-checks-chat.md#key-points

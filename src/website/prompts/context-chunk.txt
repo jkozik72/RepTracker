@@ -1,6 +1,6 @@
 CONTEXT for {{name}}
 
-Lizard
+Animal
 - Name: {{name}}
 - Species: {{species}}
 - Enclosure width: {{enclosure_width}}

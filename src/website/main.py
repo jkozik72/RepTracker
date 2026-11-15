@@ -238,7 +238,9 @@ def ProfileBrief(species):
         return None
     p = record["profile"]
     return {"slug": record["slug"], "commonName": p["commonName"], "temperaturesF": p["temperaturesF"],
-            "humidityPercent": p["humidityPercent"]}
+            "humidityPercent": p["humidityPercent"],
+            "trackedStats": [{k: s[k] for k in ("id", "label", "options", "concernOptions")} for s in p.get("trackedStats", [])],
+            "conditions": {c["name"]: c["urgency"] for c in p.get("conditions", [])}}
 
 
 def ListLizards(mode):
@@ -538,9 +540,11 @@ def GeneratePrompts(mode, lizardId, startIso, endIso, imageCount=None):
     folder = LizardFolder(mode, lizardId) / "prompts" / bundleId
     (folder / "frames").mkdir(parents=True, exist_ok=True)
 
-    schema = (PROMPTS / "response-schema.json").read_text(encoding="utf-8")
+    # The answer format for this animal: the base format with its species' activities, checks and conditions
+    base = json.loads((PROMPTS / "response-schema.json").read_text(encoding="utf-8"))
+    schema = json.dumps(research.BuildResponseSchema(base, research.FindRecord(config["species"])), indent=2, ensure_ascii=False)
     (folder / "system.txt").write_text(FillTemplate("system.txt", {**common, "response_schema": schema}), encoding="utf-8")
-    shutil.copy(PROMPTS / "response-schema.json", folder / "response-schema.json")
+    (folder / "response-schema.json").write_text(schema, encoding="utf-8")
 
     analyses = ReadJson(LizardFolder(mode, lizardId) / "analyses.json", [])
     previous = analyses[-1]["result"].get("Analysis", "") if analyses else "None yet."
@@ -628,6 +632,10 @@ def _MockPosition(img, scale):
 
 
 def MockProvider(folder, manifest, config):
+    """Offline stand-in: position from dark pixels; every other field from the bundle's own answer format,
+    as "can't see" or nothing found, so the dashboard shows the species' stats without inventing values."""
+    schema = ReadJson(folder / manifest["schema"], None) or ReadJson(PROMPTS / "response-schema.json", {})
+    props = schema.get("properties", {})
     width = config.get("enclosureWidthCm") or 100   # no width: % of the image width
     movement = []
     for chunk in manifest["chunks"]:
@@ -636,24 +644,36 @@ def MockProvider(folder, manifest, config):
     seen = [m["position"] for m in movement if m["position"] is not None]
     unit = "cm from the left wall" if config.get("enclosureWidthCm") else "% of the image width from the left"
     if not seen:
-        activity = "can't see lizard"
+        activity = "can't see animal"
     elif max(seen) - min(seen) > 0.25 * width:
         activity = "exploring"
     else:
         last = seen[-1] / width
         hotNear = last < 0.35 if config["sensors"]["hotSide"] == "left" else last > 0.65
         activity = "basking" if hotNear else "hiding"
-    return {
-        "Weight": "can't see lizard", "Shed": "can't see lizard", "Food in bowl": "no bowl visible",
+    activities = props.get("Current activity", {}).get("enum", [])
+    if activities and activity not in activities:
+        activity = "other" if "other" in activities else activities[-1]
+    last = lambda key, fallback: (props.get(key, {}).get("enum") or [fallback])[-1]
+    result = {
+        "Animal visible": "partly" if seen else "no",
         "Current activity": activity,
+        "Body condition": last("Body condition", "can't see animal"),
+        "Eating seen": last("Eating seen", "can't see animal"),
+        "Droppings seen": last("Droppings seen", "can't tell"),
+        "Food in bowl": "no bowl visible",
+        "Conditions seen": [],
         "Hazardous conditions": {"Improper substrate": False, "Unsafe lighting": False, "Temperature too high": False,
-                                 "Temperature too low": False, "Humidity too high": False,
-                                 "Signs of disease": "none", "Other": "none"},
+                                 "Temperature too low": False, "Humidity too high": False, "Other": "none"},
         "Movement Data": movement,
         "Analysis": (f"[Mock provider, not a real AI] {config['name']} was seen in {len(seen)} of {len(movement)} images"
                      + (f", between {min(seen):.0f} and {max(seen):.0f} {unit}, mostly {activity}." if seen else ".")
-                     + " Weight, shed and hazards need a real provider."),
+                     + " Body condition, species checks and conditions need a real provider."),
     }
+    checks = props.get("Species checks", {}).get("properties", {})
+    if checks:
+        result["Species checks"] = {sid: spec["enum"][-1] for sid, spec in checks.items()}
+    return result
 
 
 def MockAnswer(prompt, latest, sensorsNow, image=None):
@@ -843,6 +863,8 @@ def MockResearch(prompt, schema):
         "droppings": {"intervalDays": r(1, 3), "notes": "Mock value."},
         "shedding": {"type": "patches", "intervalDays": r(30, 45), "signs": "Mock value."},
         "observableActivities": ["basking", "hiding", "exploring"],
+        "trackedStats": [{"id": "shed", "label": "Shed (Mock)", "question": "Mock check: is the animal shedding?",
+                          "options": ["not shedding", "about to shed", "shedding", "stuck shed"], "concernOptions": ["stuck shed"]}],
         "bodyCondition": {"healthy": "Mock value.", "underweight": "Mock value.", "overweight": "Mock value."},
         "conditions": [{"name": "Example condition (Mock)", "visibleSigns": ["mock sign"], "urgency": "monitor", "notes": "Mock value."}],
         "hazards": [{"name": "Example hazard (Mock)", "description": "Mock value."}],

@@ -1,26 +1,145 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "RepTracker analysis",
+  "description": "The base format. Each analysis gets a copy built from the animal's species profile: its activities, its species checks and its named conditions.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["Weight", "Shed", "Food in bowl", "Current activity", "Hazardous conditions", "Movement Data", "Analysis"],
+  "required": [
+    "Animal visible",
+    "Current activity",
+    "Body condition",
+    "Eating seen",
+    "Droppings seen",
+    "Food in bowl",
+    "Species checks",
+    "Conditions seen",
+    "Hazardous conditions",
+    "Movement Data",
+    "Analysis"
+  ],
   "properties": {
-    "Weight": {"enum": ["obese", "overweight", "healthy", "underweight", "emaciated", "can't see lizard"]},
-    "Shed": {"enum": ["soon", "now", "not shedding", "can't see lizard"]},
-    "Food in bowl": {"enum": ["true", "false", "no bowl visible"]},
-    "Current activity": {"enum": ["basking", "exploring", "hiding", "can't see lizard"]},
+    "Animal visible": {
+      "enum": [
+        "yes",
+        "partly",
+        "no"
+      ],
+      "description": "in most of the images"
+    },
+    "Current activity": {
+      "enum": [
+        "basking",
+        "exploring",
+        "hiding",
+        "resting",
+        "eating",
+        "other",
+        "can't see animal"
+      ],
+      "description": "in the most recent images"
+    },
+    "Body condition": {
+      "enum": [
+        "healthy",
+        "underweight",
+        "overweight",
+        "can't see animal"
+      ]
+    },
+    "Eating seen": {
+      "enum": [
+        "eating",
+        "not eating",
+        "can't see animal"
+      ],
+      "description": "whether the animal ate in these images"
+    },
+    "Droppings seen": {
+      "enum": [
+        "new droppings",
+        "none seen",
+        "can't tell"
+      ]
+    },
+    "Food in bowl": {
+      "enum": [
+        "true",
+        "false",
+        "no bowl visible"
+      ]
+    },
+    "Species checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shed"
+      ],
+      "description": "checks specific to this species",
+      "properties": {
+        "shed": {
+          "enum": [
+            "not shedding",
+            "about to shed",
+            "shedding",
+            "stuck shed",
+            "can't see animal"
+          ],
+          "description": "Shed: is the animal shedding, or is old skin stuck (toes, tail tip, eyes)?"
+        }
+      }
+    },
+    "Conditions seen": {
+      "type": "array",
+      "description": "conditions with visible signs in these images; an empty list if none",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "signs"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "signs": {
+            "type": "string",
+            "description": "what was seen, and in which images"
+          }
+        }
+      }
+    },
     "Hazardous conditions": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["Improper substrate", "Unsafe lighting", "Temperature too high", "Temperature too low", "Humidity too high", "Signs of disease", "Other"],
+      "required": [
+        "Improper substrate",
+        "Unsafe lighting",
+        "Temperature too high",
+        "Temperature too low",
+        "Humidity too high",
+        "Other"
+      ],
       "properties": {
-        "Improper substrate": {"type": "boolean"},
-        "Unsafe lighting": {"type": "boolean"},
-        "Temperature too high": {"type": "boolean"},
-        "Temperature too low": {"type": "boolean"},
-        "Humidity too high": {"type": "boolean"},
-        "Signs of disease": {"type": "string", "description": "\"none\", or describe the illness"},
-        "Other": {"type": "string", "description": "\"none\", or describe the hazard"}
+        "Improper substrate": {
+          "type": "boolean"
+        },
+        "Unsafe lighting": {
+          "type": "boolean"
+        },
+        "Temperature too high": {
+          "type": "boolean"
+        },
+        "Temperature too low": {
+          "type": "boolean"
+        },
+        "Humidity too high": {
+          "type": "boolean"
+        },
+        "Other": {
+          "type": "string",
+          "description": "\"none\", or describe the hazard"
+        }
       }
     },
     "Movement Data": {
@@ -29,13 +148,28 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["time", "position"],
+        "required": [
+          "time",
+          "position"
+        ],
         "properties": {
-          "time": {"type": "string", "description": "the image's timestamp label"},
-          "position": {"type": ["number", "null"], "description": "horizontal position in the unit the prompt gives (cm from the left wall, or % of the image width); null if not visible"}
+          "time": {
+            "type": "string",
+            "description": "the image's timestamp label"
+          },
+          "position": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "horizontal position in the unit the prompt gives (cm from the left wall, or % of the image width); null if not visible"
+          }
         }
       }
     },
-    "Analysis": {"type": "string", "description": "Two to four sentences for the keeper: what the lizard did and anything to act on"}
+    "Analysis": {
+      "type": "string",
+      "description": "Two to four sentences for the keeper: what the lizard did and anything to act on"
+    }
   }
 }

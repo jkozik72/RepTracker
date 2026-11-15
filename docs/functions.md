@@ -23,23 +23,24 @@ Terms and meanings come from the 2026-11-14 notes: the [brief](notes/2026-11-14-
 
 | Term | Meaning | Don't use |
 |---|---|---|
-| lizard | The tracked animal. One section of the dashboard each. Whether other reptiles are in scope: Q18. | animal, pet |
+| animal | The tracked reptile or amphibian (D6). One section of the dashboard each. Code names still say `lizard` (`lizards`, `/lizards`). | lizard (in the UI), pet |
+| species check | A species-specific thing to check in every analysis, with its answers and concern answers, from the species profile (`trackedStats`). | tracked stat |
 | species | A lizard's species: a field of the add-lizard form and the input to research. | |
 | web app | The local website as a whole: UI, web interface, backend. | website, app |
 | dashboard | The page with the status and alerts bar and one section per lizard. | |
 | raw video | A recorded video file, before motion tracking. | |
 | processed video | The video that motion tracking outputs. | |
 | motion tracking | Video in, position of the lizard out. | |
-| position | Where the lizard is in a frame. Units: TBD (Q13). | |
+| position | Where the animal is in a frame. Units: TBD (Q13). | |
 | speed | How fast the position changes. Units: TBD (Q13). | |
-| lizard present | Whether the lizard is in the frame. | in frame, on screen |
+| animal visible | Whether the animal is in the frame ("Animal visible": yes, partly, no). | lizard present, in frame, on screen |
 | statistics | Values computed per lizard: position, speed, lizard present, and others (Q13). | |
 | movement graph | The dashboard graph of how much a lizard moved throughout the day. | |
 | research | The LLM's information gathering for one species. | |
 | structured information | What research outputs, per species. | knowledge base, research files |
 | poll | One request to the AI model to analyze a frame. Poll rate: how often that happens. | |
 | report | The structured result of one poll. It gives the status. | |
-| status | A lizard's condition, from a finite set (examples: shedding, overweight). The set: Q12. | |
+| status | An animal's condition, from a finite set (examples: shedding, overweight). The set: Q12. | |
 | alert | A notice to the user at the top of the dashboard. | |
 | LLM, VLM | Large language model; vision-language model. | |
 | DSP | Digital signal processing. The board's label for the motion-tracking stage. | |
@@ -117,6 +118,7 @@ The Gemini provider being tried (Q11): Gemini through Vertex AI, signed in with 
 | `Ping` | One tiny request that proves login, project, location and model | none → a sentence with the time taken in s |
 | `ReadReply` | The reply's text; `AiError` if it was blocked, cut off or empty | response → text |
 | `ParseJson` | The reply as JSON; accepts a Markdown code fence around it | text → object |
+| `_Nested` | Cleans an object or list in the answer (species checks, conditions seen): enums matched, else their last option; at most 20 list entries | value, spec → value |
 | `NormalizeResult` | Forces a reply into `prompts/response-schema.json`: off-list or missing values become the field's last enum option, `False` or `"none"`; repairs are listed in `notes`. Refuses a reply with none of the schema's fields | reply, schema, image labels, enclosure width in cm → result |
 | `NormalizeMovement` | One position per image sent: matched by timestamp, or by order when there is one entry per image | reply's Movement Data, image labels, maximum position (enclosure width in cm, or 100 for % of the image) → `[{time, position}]`; also reads the older `position_cm` key |
 | `FrameLabels` | Timestamp labels of a bundle's images, in the order sent | manifest → list |
@@ -134,6 +136,8 @@ Species profiles (D5): storage, schema checks, photos and prompt text. No AI cal
 | `NewRecord` | A record around a profile: species as typed, slug, time, provider, model | species, profile, provider, model → record |
 | `NormalizeProfile` | Forces an AI reply or a keeper's edit into `prompts/profile-schema.json`: off-list enums become "other" (or the last option), non-numbers 0, backwards ranges swapped; refuses a profile with no common name | dict → (profile, notes) |
 | `FetchImages` | Up to 6 reference photos from Wikimedia Commons (search by scientific name), saved with author, licence and source; never raises | record → (images, note) |
+| `CleanTrackedStats` | Species checks the dashboard can use: unique snake_case ids, 2+ options, concern options that are real options, "can't see animal" last; at most 6 | stats, notes → stats |
+| `BuildResponseSchema` | The answer format for one animal: the base `response-schema.json` with the species' activities, checks and named conditions; base as is without a profile | base schema, record → schema |
 | `PromptText` | The profile as plain text for the CONTEXT chunk | record → text |
 | `Summary` | What the Research list shows for a profile | record → dict |
 
@@ -168,6 +172,8 @@ The Claude provider (D4): the Claude API through the `anthropic` package, import
 | `loadMode` | Loads the current mode's media and lizards and redraws everything |
 | `renderVideoBox` | The camera video with its time and source labels; in the expanded card, a full-screen button (the browser's Fullscreen API) |
 | `openEdit` | Opens the add-lizard form filled in with a lizard's settings, to save changes to it |
+| `aiStatsHtml` | The AI part of the stats panel: activity, body condition, eating, droppings, visible, food dish, then the species checks (concerns in red); older analyses show their own fields | animal → HTML |
+| `checkInfo` | A species check's label, answers and concern answers, from the profile (or a plain label for an older analysis) | animal, id → check |
 | `checkSensorRanges` | Live sensor readings against the lizard's species profile: temperatures per side, humidity as the average of both sides; out-of-range values turn red and become alerts | lizard, now → none |
 | `loadProfiles` / `showProfile` / `renderProfile` | The Research tab: the profile list, and one profile with photos, husbandry facts, conditions, hazards, and Edit / Regenerate / Delete | |
 | `suggestSpecies` / `renderSuggestions` | Spelling help for species: up to 3 "Did you mean" suggestions from profiles and `data/species-names.json` (names, scientific names, nicknames), or a ✓ when the name is known | typed text → `{exact, list}` |

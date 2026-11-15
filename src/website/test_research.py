@@ -119,6 +119,57 @@ class StoreTest(unittest.TestCase):
         self.assertTrue((Path(self.tmp.name) / record["slug"] / "images" / "01.jpg").exists())
 
 
+BASE = json.loads((Path(__file__).parent / "prompts" / "response-schema.json").read_text(encoding="utf-8"))
+TURTLE_STATS = [{"id": "Shell condition", "label": "Shell", "question": "Look at the shell.",
+                 "options": ["normal", "scute shedding", "soft or pitted patches", "white spots", "can't see animal"],
+                 "concernOptions": ["soft or pitted patches", "white spots", "not an option"]}]
+
+
+class SpeciesChecksTest(unittest.TestCase):
+    def test_checks_are_cleaned(self):
+        notes = []
+        stats = research.CleanTrackedStats(TURTLE_STATS + [{"id": "x", "label": "Bad", "options": ["only one"], "concernOptions": []}], notes)
+        self.assertEqual(len(stats), 1)
+        self.assertEqual(stats[0]["id"], "shell_condition")
+        self.assertEqual(stats[0]["options"][-1], "can't see animal")
+        self.assertEqual(stats[0]["options"].count("can't see animal"), 1)
+        self.assertEqual(stats[0]["concernOptions"], ["soft or pitted patches", "white spots"])
+        self.assertTrue(any("Bad" in n for n in notes))
+
+    def Profile(self, **changes):
+        raw = json.loads(json.dumps(GOOD)); raw["trackedStats"] = TURTLE_STATS
+        raw["observableActivities"] = ["Basking", "swimming"]
+        raw["conditions"] = [{"name": "Shell rot", "visibleSigns": ["white patches"], "urgency": "vet soon", "notes": ""}]
+        raw.update(changes)
+        return {"profile": research.NormalizeProfile(raw)[0]}
+
+    def test_format_built_from_a_profile(self):
+        schema = research.BuildResponseSchema(BASE, self.Profile())
+        props = schema["properties"]
+        self.assertEqual(props["Current activity"]["enum"], ["basking", "swimming", "other", "can't see animal"])
+        self.assertEqual(list(props["Species checks"]["properties"]), ["shell_condition"])
+        self.assertEqual(props["Species checks"]["required"], ["shell_condition"])
+        self.assertEqual(props["Conditions seen"]["items"]["properties"]["name"]["enum"], ["Shell rot", "other"])
+        self.assertEqual(BASE["properties"]["Species checks"]["required"], ["shed"])     # the base is not changed
+
+    def test_no_profile_keeps_the_base_and_no_checks_drops_them(self):
+        self.assertEqual(research.BuildResponseSchema(BASE, None), BASE)
+        frog = self.Profile(trackedStats=[], shedding={"type": "continuous", "intervalDays": R(7, 14), "signs": ""})
+        schema = research.BuildResponseSchema(BASE, frog)
+        self.assertNotIn("Species checks", schema["properties"])
+        self.assertNotIn("Species checks", schema["required"])
+
+    def test_nested_answers_are_cleaned(self):
+        import ai
+        schema = research.BuildResponseSchema(BASE, self.Profile())
+        reply = {"Current activity": "Swimming", "Species checks": {"shell_condition": "White Spots", "extra": "x"},
+                 "Conditions seen": [{"name": "shell rot", "signs": "white patch"}, {"name": "made up", "signs": "y"}, "junk"]}
+        result = ai.NormalizeResult(reply, schema, [], 100, [])
+        self.assertEqual(result["Current activity"], "swimming")
+        self.assertEqual(result["Species checks"], {"shell_condition": "white spots"})
+        self.assertEqual(result["Conditions seen"], [{"name": "Shell rot", "signs": "white patch"}, {"name": "other", "signs": "y"}])
+
+
 class ClaudeResearchTest(unittest.TestCase):
     def test_request_is_structured_and_answer_is_parsed(self):
         calls = []

@@ -55,3 +55,11 @@ Entry format:
 - **Sources:** `docs/notes/2026-11-15-species-profiles-chat.md`; `docs/notes/2026-11-14-project-brief.md` § Research and image analysis
 - **Replaces:** none
 
+## D6 (2026-11-15): Any reptile or amphibian, called "animal"; what to track comes from the species profile
+- **Context:** RepTracker was built for lizards: a fixed answer format (weight, shed, food bowl, basking/exploring/hiding) and "lizard" in the UI. Keepers want it for any reptile, and frogs; what to check differs by species (turtles do not shed like lizards). Q18 asked whether other reptiles are in scope.
+- **Options:** A: lizards only. B: any reptile, called "reptile", with one answer format. C: any reptile or amphibian, called "animal", with common stats for every animal plus checks defined per species in its profile (D5).
+- **Chose:** C. Every analysis asks for: visible, activity (the species' own list), body condition, eating, droppings, food dish, hazards, conditions seen (the species' named conditions), position; plus 1 to 4 species checks ("trackedStats") that the AI writes into the profile at research time, each with its answers and which answers are a concern. "Animal" because frogs and salamanders are amphibians.
+- **Consequences:** `prompts/response-schema.json` is the animal-neutral base; each bundle gets its own copy built from the profile. The dashboard shows whatever the analysis holds, with alerts for concern answers and named conditions, and Watch for in-between answers. Profiles made before this change have no checks until regenerated. Code names (`lizards`, `/lizards` routes, `data/<mode>/reptiles/`) stay as they are.
+- **Sources:** `docs/notes/2026-11-15-species-checks-chat.md`; `docs/notes/2026-11-15-species-profiles-chat.md`
+- **Replaces:** none
+

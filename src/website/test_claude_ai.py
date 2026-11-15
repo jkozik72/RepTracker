@@ -20,10 +20,10 @@ LABELS = ["2026-11-12 00:00 UTC", "2026-11-12 00:01 UTC", "2026-11-12 00:02 UTC"
 SCHEMA = json.loads((Path(__file__).resolve().parent / "prompts" / "response-schema.json").read_text(encoding="utf-8"))
 CONFIG = {"enclosureWidthCm": 90}
 GOOD = {
-    "Weight": "healthy", "Shed": "not shedding", "Food in bowl": "false", "Current activity": "basking",
+    "Animal visible": "yes", "Current activity": "basking", "Body condition": "healthy", "Eating seen": "not eating",
+    "Droppings seen": "none seen", "Food in bowl": "false", "Species checks": {"shed": "not shedding"}, "Conditions seen": [],
     "Hazardous conditions": {"Improper substrate": False, "Unsafe lighting": False, "Temperature too high": False,
-                             "Temperature too low": False, "Humidity too high": False,
-                             "Signs of disease": "none", "Other": "none"},
+                             "Temperature too low": False, "Humidity too high": False, "Other": "none"},
     "Movement Data": [{"time": label, "position": 10.0 * (i + 1)} for i, label in enumerate(LABELS)],
     "Analysis": "Basked under the lamp the whole time.",
 }

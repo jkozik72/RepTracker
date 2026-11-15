@@ -153,7 +153,29 @@ def NormalizeProfile(raw, schema=None):
     if not isinstance(raw, dict) or not str(raw.get("commonName") or "").strip():
         raise ResearchError("The profile has no common name, so it was not saved. Try again.")
     notes = []
-    return _Normalize(raw, schema, schema, "", notes), notes
+    profile = _Normalize(raw, schema, schema, "", notes)
+    profile["trackedStats"] = CleanTrackedStats(profile.get("trackedStats", []), notes)
+    return profile, notes
+
+
+CANT_SEE = "can't see animal"
+
+
+def CleanTrackedStats(stats, notes):
+    """Species checks the dashboard can use: unique snake_case ids, at least two options, concern options that
+    are real options, and a "can't see animal" option last. At most 6."""
+    out, seen = [], set()
+    for stat in stats[:6]:
+        sid = re.sub(r"[^a-z0-9]+", "_", (stat.get("id") or stat.get("label") or "").lower()).strip("_")[:40]
+        options = list(dict.fromkeys(o.strip() for o in stat.get("options", []) if o and o.strip() and o.strip().lower() != CANT_SEE))
+        if not sid or sid in seen or len(options) < 2:
+            notes.append(f"Dropped species check {stat.get('label') or sid!r}: it needs a unique name and at least two options.")
+            continue
+        seen.add(sid)
+        concerns = [c for c in dict.fromkeys(c.strip() for c in stat.get("concernOptions", [])) if c in options]
+        out.append({"id": sid, "label": stat.get("label") or sid.replace("_", " ").title(), "question": stat.get("question", ""),
+                    "options": options + [CANT_SEE], "concernOptions": concerns})
+    return out
 
 
 # ---------- reference photos (Wikimedia Commons) ----------
@@ -207,6 +229,41 @@ def FetchImages(record):
     return images, note
 
 
+# ---------- the answer format for one animal ----------
+
+def BuildResponseSchema(base, record):
+    """prompts/response-schema.json for one animal: the species' activities, checks and named conditions.
+
+    Without a profile the base format is used as is (its default check is shed). A profile with no checks
+    (or one made before checks existed) keeps the shed check only if the species sheds in one piece or in patches.
+    """
+    import copy
+    schema = copy.deepcopy(base)
+    if not record:
+        return schema
+    p, props = record["profile"], schema["properties"]
+    activities = [a.strip().lower() for a in p.get("observableActivities", []) if a and a.strip()]
+    props["Current activity"]["enum"] = list(dict.fromkeys(activities + ["other", CANT_SEE]))
+    stats = p.get("trackedStats") or []
+    if stats:
+        checks = {s["id"]: {"enum": s["options"], "description": f"{s['label']}: {s['question']}"} for s in stats}
+    elif p.get("shedding", {}).get("type") in ("whole", "patches"):
+        checks = props["Species checks"]["properties"]
+    else:
+        checks = {}
+    if checks:
+        props["Species checks"]["properties"] = checks
+        props["Species checks"]["required"] = list(checks)
+    else:
+        del props["Species checks"]
+        schema["required"].remove("Species checks")
+    names = [c["name"] for c in p.get("conditions", []) if c.get("name")]
+    if names:
+        props["Conditions seen"]["items"]["properties"]["name"] = {"enum": list(dict.fromkeys(names + ["other"])),
+                                                                   "description": "a condition from the species profile, or other"}
+    return schema
+
+
 # ---------- the profile in an analysis prompt ----------
 
 def _R(r, unit=""):
@@ -229,6 +286,9 @@ def PromptText(record):
         f"Droppings: about every {_R(p['droppings']['intervalDays'], ' days')}. {p['droppings']['notes']}",
         f"Shedding: {p['shedding']['type']}, about every {_R(p['shedding']['intervalDays'], ' days')}. Signs: {p['shedding']['signs']}",
         "Activities a camera can see: " + ", ".join(p["observableActivities"]) + ".",
+        *(["Species checks (answer each in \"Species checks\"):"] +
+          [f"- {s['label']}: {s['question']} Concerns: {', '.join(s['concernOptions']) or 'none'}." for s in p.get("trackedStats", [])]
+          if p.get("trackedStats") else []),
         f"Body condition. Healthy: {p['bodyCondition']['healthy']} Underweight: {p['bodyCondition']['underweight']} "
         f"Overweight: {p['bodyCondition']['overweight']}",
         "Conditions to watch for (visible signs):",
