@@ -242,6 +242,11 @@
   .poll-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .poll-row select { width: auto; }
   .check { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; } .check input { margin-top: 4px; }
   .dev-settings { display: grid; gap: 18px; border-top: 1px solid var(--border); padding-top: 16px; }
+  .sys-log { font: 12px/1.45 ui-monospace, Consolas, monospace; background: var(--surface-2); border-radius: 8px; padding: 8px 10px; margin: 8px 0 0; max-height: 220px; overflow: auto; white-space: pre-wrap; }
+  .sys-uninstall { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-top: 10px; }
+  .sys-uninstall summary { cursor: pointer; font-weight: 600; color: var(--bad); }
+  .sys-uninstall[open] summary { margin-bottom: 8px; }
+  .btn.danger { border-color: var(--bad); color: var(--bad); }
   .upload-row { display: flex; gap: 8px; align-items: center; }
   .upload-row input[type="file"] { flex: 1; padding: 5px; }
   .file-list { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
@@ -443,6 +448,33 @@
         <p class="hint" id="poll-state">Stopped.</p>
         <p class="hint">At each interval mark of the dashboard clock, every animal on the dashboard is analysed for the interval that just ended, with the AI provider in use. Runs while this page is open, and is stopped whenever the page loads. With the dev clock sped up, intervals (and calls) come faster. A real provider bills every call.</p>
       </div>
+      <div id="system-settings">
+        <h2>This installation</h2>
+        <p class="hint" id="sys-version" style="margin-top:0">Checking…</p>
+        <div id="sys-controls" hidden>
+          <div class="poll-row">
+            <label for="sys-branch" style="margin:0">Branch</label>
+            <select id="sys-branch" aria-describedby="sys-update-hint"><option>Loading…</option></select>
+            <button class="btn primary" type="button" id="sys-update">Update</button>
+            <button class="btn" type="button" id="sys-restart">Restart</button>
+          </div>
+          <p class="hint" id="sys-update-hint">Update downloads the branch from GitHub, installs its packages and restarts RepTracker (about a minute). Animals, profiles, the account and the API key stay; Toy mode's sample animals go back to the branch's.</p>
+          <details class="sys-uninstall">
+            <summary>Uninstall</summary>
+            <form id="sys-uninstall-form" autocomplete="off">
+              <p class="hint" style="margin-top:0">Stops RepTracker, removes it from this Pi and gives the Pi its old name back. System packages (git, Python, ffmpeg) stay.</p>
+              <label class="check"><input type="checkbox" name="deleteData">
+                <span>Also delete the data (animals, videos, profiles, account, API key). <span class="hint" style="margin:0">Otherwise it is copied to <code>/opt/reptracker-backup-&lt;date&gt;</code>.</span></span></label>
+              <label for="sys-password" style="margin-top:8px">Your password, to confirm</label>
+              <div class="poll-row"><input id="sys-password" name="password" type="password" autocomplete="current-password" required style="flex:1;width:auto">
+                <button class="btn danger" type="submit">Uninstall RepTracker</button></div>
+            </form>
+          </details>
+        </div>
+        <p class="error" id="sys-error" hidden></p><p class="ok-msg" id="sys-ok" hidden></p>
+        <pre class="sys-log" id="sys-log" hidden></pre>
+      </div>
+
       <label class="check"><input type="checkbox" id="dev-mode">
         <span><strong>Dev mode</strong><br><span class="hint" style="margin:0">Clock controls above the alerts (speed, set time, pause, resume), a prompt inspector on each animal, Toy / Main data, and uploads.</span></span>
       </label>
@@ -1500,7 +1532,7 @@ addErr.addEventListener("click", e => {
 const tabs = [...document.querySelectorAll(".tab")];
 function selectTab(tab) {
   tabs.forEach(t => { const on = t === tab; t.setAttribute("aria-selected", on); t.tabIndex = on ? 0 : -1; document.getElementById(t.getAttribute("aria-controls")).hidden = !on; });
-  if (tab.id === "tab-settings") loadAi();
+  if (tab.id === "tab-settings") { loadAi(); loadSystem(); }
   if (tab.id === "tab-research") loadProfiles();   // re-check, e.g. after signing in to Google in a terminal
 }
 tabs.forEach(t => {
@@ -1593,6 +1625,83 @@ $("#ai-test").addEventListener("click", async e => {
   catch (x) { result = ["error", x.message]; }
   await loadAi(); aiMessage(...result);   // a failed test can change the status (an expired sign-in, for example)
   btn.disabled = false; btn.textContent = "Test connection";
+});
+
+/* Settings: this installation. Update, restart and uninstall only on a Pi installed with src/pi/install.sh (D8). */
+let systemInfo = null, systemBranches = null, systemWatch = null;
+const sysButtons = on => document.querySelectorAll("#sys-controls button").forEach(b => b.disabled = !on);
+async function loadSystem() {
+  try { systemInfo = await readResponse(await fetch("/api/system")); }
+  catch (x) { $("#sys-version").textContent = `Couldn't read this installation: ${x.message}`; return; }
+  renderSystem();
+  if (systemInfo.managed && !systemBranches) {
+    try { systemBranches = (await readResponse(await fetch("/api/system/branches"))).branches; }
+    catch (x) { sysMessage("error", x.message); }
+    renderSystem();
+  }
+}
+function renderSystem() {
+  const s = systemInfo; if (!s) return;
+  const when = s.date ? ` · ${new Date(s.date).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}` : "";
+  $("#sys-version").innerHTML = s.commit
+    ? `Branch <strong>${esc(s.branch)}</strong> at <code>${esc(s.commit)}</code> ${esc(s.subject)}${esc(when)}.`
+      + (s.managed ? "" : `<br>Update, restart and uninstall are here on a Pi installed with <code>src/pi/install.sh</code>.`)
+    : "Not a git checkout, so there is no version to show.";
+  $("#sys-controls").hidden = !s.managed;
+  if (s.managed) {
+    const names = [...(systemBranches || [])];
+    if (!names.includes(s.branch)) names.unshift(s.branch);
+    $("#sys-branch").innerHTML = names.map(n => `<option ${n === s.branch ? "selected" : ""}>${esc(n)}</option>`).join("");
+  }
+  if (s.task && !systemWatch) { $("#sys-log").textContent = s.task.trim(); $("#sys-log").hidden = false; }
+}
+function sysMessage(kind, text) {
+  $("#sys-error").hidden = $("#sys-ok").hidden = true;
+  if (text) { const el = $(kind === "ok" ? "#sys-ok" : "#sys-error"); el.textContent = text; el.hidden = false; }
+}
+async function startSystem(action, body) {
+  sysMessage(); sysButtons(false);
+  try {
+    await readResponse(await fetch(`/api/system/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) }));
+  } catch (x) { sysMessage("error", x.message); sysButtons(true); return; }
+  const before = systemInfo && systemInfo.commit, log = $("#sys-log");
+  log.textContent = "Starting…"; log.hidden = false;
+  sysMessage("ok", action === "uninstall" ? "Uninstalling. This page stops working when it's done."
+                 : action === "update" ? "Updating. RepTracker restarts at the end; this page reconnects by itself." : "Restarting…");
+  // Follow the task log. The server goes away during the restart, then comes back.
+  let away = 0;
+  clearInterval(systemWatch);
+  systemWatch = setInterval(async () => {
+    let info;
+    try { info = await (await fetch("/api/system", { cache: "no-store" })).json(); away = 0; }
+    catch {
+      away++;
+      if (!log.textContent.endsWith("(RepTracker is restarting…)")) log.textContent += "\n(RepTracker is restarting…)";
+      if (action === "uninstall" && away > 5) { clearInterval(systemWatch); systemWatch = null; sysMessage("ok", "RepTracker has been uninstalled. You can close this page."); }
+      return;
+    }
+    if (info.task) log.textContent = info.task.trim();
+    const last = (info.task || "").trim().split("\n").pop() || "";
+    if (action === "uninstall" || !/ (DONE|FAILED)/.test(last)) return;
+    clearInterval(systemWatch); systemWatch = null;
+    systemInfo = info; renderSystem(); sysButtons(true);
+    if (/ FAILED/.test(last)) sysMessage("error", last.replace(/^\S+ \S+ /, ""));
+    else if (info.commit !== before) { sysMessage("ok", "Updated. Reloading the page…"); setTimeout(() => location.reload(), 1500); }
+    else sysMessage("ok", action === "update" ? "Already up to date; restarted." : "Restarted.");
+  }, 2000);
+}
+$("#sys-update").addEventListener("click", () => {
+  const branch = $("#sys-branch").value;
+  if (confirm(`Update RepTracker to the latest "${branch}" from GitHub and restart it?`)) startSystem("update", { branch });
+});
+$("#sys-restart").addEventListener("click", () => { if (confirm("Restart RepTracker? Pages reconnect after a few seconds.")) startSystem("restart"); });
+$("#sys-uninstall-form").addEventListener("submit", e => {
+  e.preventDefault();
+  const f = e.currentTarget, deleteData = f.deleteData.checked;
+  if (!confirm(deleteData ? "Uninstall RepTracker and DELETE all its data? This can't be undone."
+                          : "Uninstall RepTracker? Its data is kept in a backup folder on the Pi.")) return;
+  startSystem("uninstall", { password: f.password.value, deleteData });
+  f.password.value = "";
 });
 
 /* Settings: dev mode, toy/main, uploads (all apply immediately) */

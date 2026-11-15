@@ -158,7 +158,29 @@ Sign-in (D7). Files: `data/auth.json` (account, password hash), `data/secret_key
 | `CreateAccount` | The first visit's account: username 3 to 40, password 10+ and confirmed, stored as a scrypt hash; refused once one exists | username, password, confirm → (username, id) |
 | `CheckLogin` | Checks a sign-in; repeated wrong passwords lock that address out (30 s doubling to 15 min) | username, password, address → (username, id) |
 | `SecretKey` | The cookie signing key, made once | → text |
-| `Certificate` / `LanAddresses` | A self-signed certificate for this computer's names and LAN addresses, made once; the addresses | → (cert, key paths) / list |
+| `Certificate` / `LanAddresses` | A self-signed certificate for this computer's names and LAN addresses; made once, and again when the computer is renamed. The addresses | → (cert, key paths) / list |
+| `HostNames` | The computer's name and its `.local` name | → list |
+
+### `src/website/system.py`
+
+This installation (D8). Update, restart and uninstall only where `src/pi/install.sh` set it up (`REPTRACKER_MANAGED=1` and `/usr/local/sbin/reptracker-admin` exist).
+
+| Function | Does | In → out |
+|---|---|---|
+| `Managed` | Whether the Pi installer set this up | → bool |
+| `Info` | Branch, commit, the last task's log | → dict |
+| `Branches` | The branches on GitHub, main first | → list |
+| `Run` | Starts `reptracker-admin` through `sudo -n` (it runs detached) | action, branch, deleteData → dict |
+
+`app.ServeLan` serves `--lan`: cheroot over HTTPS, plus a plain-HTTP port that only redirects (`--http-redirect`).
+
+### `src/pi/`
+
+| File | Does |
+|---|---|
+| `install.sh` | Installs or updates RepTracker on a Pi: packages, `reptracker` user, repo, venv, `/etc/reptracker.env`, hostname, sudo rule, service |
+| `reptracker-admin` | `update [branch]`, `restart`, `uninstall [--delete-data]`, `status`, `log`; long tasks run as a `systemd-run` unit and log to `/opt/reptracker/task.log` |
+| `reptracker.service` | The systemd unit: runs `app.py --lan` as `reptracker`, restarts on exit |
 
 ### `src/website/claude_ai.py`
 
@@ -203,6 +225,7 @@ The Claude provider (D4): the Claude API through the `anthropic` package, import
 | `renderMovement` / `barChart` / `zoneOf` | The Movement section: time on each side (all, day, night), movement per interval, by hour of day; bar charts; which third a position is in | |
 | `feedingStatus` | Days since the last feeding (dashboard clock) and Fed / Due / Overdue from the profile | animal → status or null |
 | `noteText` | A notification's text with species check labels from the profile | |
+| `loadSystem` / `renderSystem` / `startSystem` | Settings, This installation: branch and commit; update, restart, uninstall, following the task log through the restart | |
 | `toggleExpand` | Opens a lizard from compact to full width, or closes it |
 | `positionScale` | Client-side twin of `PositionScale`: the position chart's unit and maximum |
 | `loadAi` | Loads the AI provider status on its own, so a slow check never delays the lizards: at start, when Settings opens, after a test or a refused switch |

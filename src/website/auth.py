@@ -119,17 +119,26 @@ def LanAddresses():
     return sorted(a for a in found if not a.startswith("127."))
 
 
+def HostNames():
+    """This computer's names: its hostname and the hostname.local that mDNS (avahi, Bonjour) announces."""
+    host = socket.gethostname().split(".")[0].lower()
+    return [host, f"{host}.local"]
+
+
 def Certificate():
-    """(cert path, key path) of a self-signed certificate for this computer, made once (valid 2 years)."""
-    cert, key = TLS_DIR / "cert.pem", TLS_DIR / "key.pem"
-    if cert.exists() and key.exists():
+    """(cert path, key path) of a self-signed certificate for this computer (valid 2 years). Made once, and again
+    when the computer's name changes (the Pi installer renames it to "reptracker")."""
+    cert, key, made = TLS_DIR / "cert.pem", TLS_DIR / "key.pem", TLS_DIR / "names.txt"
+    names_now = " ".join(HostNames())
+    if cert.exists() and key.exists() and made.exists() and made.read_text(encoding="utf-8").strip() == names_now:
         return str(cert), str(key)
     from cryptography import x509
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import ec
     from cryptography.x509.oid import NameOID
     host = socket.gethostname()
-    names = [x509.DNSName("localhost"), x509.DNSName(host), x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]
+    names = [x509.DNSName("localhost")] + [x509.DNSName(n) for n in HostNames()]
+    names += [x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]
     names += [x509.IPAddress(ipaddress.ip_address(a)) for a in LanAddresses()]
     private = ec.generate_private_key(ec.SECP256R1())
     subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, f"RepTracker on {host}")])
@@ -143,4 +152,5 @@ def Certificate():
     TLS_DIR.mkdir(parents=True, exist_ok=True)
     key.write_bytes(private.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
     cert.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+    made.write_text(names_now, encoding="utf-8")
     return str(cert), str(key)

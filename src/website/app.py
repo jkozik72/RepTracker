@@ -6,6 +6,7 @@ from werkzeug.exceptions import HTTPException
 
 import auth
 import main
+import system
 from main import RepTrackerError
 
 app = Flask(__name__)
@@ -18,6 +19,11 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_GB * 1024 ** 3   # streamed to a t
 
 @app.errorhandler(RepTrackerError)
 def handle_error(err):
+    return jsonify({"error": str(err)}), 400
+
+
+@app.errorhandler(system.AdminError)
+def handle_admin_error(err):
     return jsonify({"error": str(err)}), 400
 
 
@@ -91,6 +97,29 @@ def logout():
 @app.get("/api/me")
 def me():
     return jsonify({"user": session.get("user")})
+
+
+# ---------- this installation: branch, update, restart, uninstall (D8) ----------
+
+@app.get("/api/system")
+def system_info():
+    return jsonify(system.Info())
+
+
+@app.get("/api/system/branches")
+def system_branches():
+    return jsonify({"branches": system.Branches()})
+
+
+@app.post("/api/system/<action>")
+def system_action(action):
+    body = request.get_json(force=True) or {}
+    if action == "uninstall":   # the one step that can't be undone from the page: ask for the password again
+        try:
+            auth.CheckLogin(session.get("user"), body.get("password"), request.remote_addr)
+        except auth.AuthError as err:
+            return jsonify({"error": str(err)}), 400
+    return jsonify(system.Run(action, body.get("branch"), bool(body.get("deleteData"))))
 
 
 @app.route("/")
@@ -282,18 +311,44 @@ def ask(mode, lizard_id):
     return jsonify(main.AskQuestion(mode, lizard_id, body.get("question"), body.get("now"), bool(body.get("vision", True))))
 
 
+def ServeLan(port, redirectPort):
+    """The LAN server: cheroot (a production WSGI server) over HTTPS, and optionally a plain-HTTP port that
+    only redirects to HTTPS, so typing reptracker.local works. Falls back to Flask's server without cheroot."""
+    app.config["SESSION_COOKIE_SECURE"] = True
+    cert, key = auth.Certificate()
+    suffix = "" if port == 443 else f":{port}"
+    print("RepTracker on your network (HTTPS; the browser warns once about the self-signed certificate):")
+    for address in auth.HostNames() + (auth.LanAddresses() or ["<this computer's IP>"]):
+        print(f"  https://{address}{suffix}")
+    try:
+        from cheroot import wsgi
+        from cheroot.ssl.builtin import BuiltinSSLAdapter
+    except ImportError:
+        app.run(host="0.0.0.0", port=port, ssl_context=(cert, key), debug=False, threaded=True)
+        return
+    import threading
+    if redirectPort:
+        def redirect_app(environ, start_response):
+            host = (environ.get("HTTP_HOST") or "localhost").split(":")[0]
+            path = environ.get("PATH_INFO", "/") + (f"?{environ['QUERY_STRING']}" if environ.get("QUERY_STRING") else "")
+            start_response("301 Moved Permanently", [("Location", f"https://{host}{suffix}{path}"), ("Content-Length", "0")])
+            return [b""]
+        plain = wsgi.Server(("0.0.0.0", redirectPort), redirect_app, numthreads=2)
+        threading.Thread(target=plain.safe_start, daemon=True).start()
+    server = wsgi.Server(("0.0.0.0", port), app, numthreads=16, timeout=600)
+    server.ssl_adapter = BuiltinSSLAdapter(cert, key)
+    server.safe_start()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="RepTracker dashboard")
     parser.add_argument("--lan", action="store_true",
                         help="serve on the local network over HTTPS (self-signed certificate), with debug off")
     parser.add_argument("--port", type=int, default=5000)
+    parser.add_argument("--http-redirect", type=int, default=0, metavar="PORT",
+                        help="with --lan: also listen on this plain-HTTP port, only to redirect to HTTPS (0 = off)")
     args = parser.parse_args()
     if args.lan:
-        app.config["SESSION_COOKIE_SECURE"] = True
-        cert = auth.Certificate()
-        print("RepTracker on your network (HTTPS; the browser warns once about the self-signed certificate):")
-        for address in auth.LanAddresses() or ["<this computer's IP>"]:
-            print(f"  https://{address}:{args.port}")
-        app.run(host="0.0.0.0", port=args.port, ssl_context=cert, debug=False, threaded=True)
+        ServeLan(args.port, args.http_redirect)
     else:
         app.run(port=args.port, debug=True)   # this computer only (127.0.0.1)

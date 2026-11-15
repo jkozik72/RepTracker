@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# RepTracker admin: update, restart, uninstall. Installed root-owned to /usr/local/sbin by install.sh.
+# The web app runs it through one sudo rule (see /etc/sudoers.d/reptracker), so it never runs repository
+# code as root: git and pip run as the reptracker user; root only restarts the service and removes files.
+#
+#   sudo reptracker-admin update [branch]          fetch, switch to the branch (default: the current one), restart
+#   sudo reptracker-admin restart
+#   sudo reptracker-admin uninstall [--delete-data]  remove RepTracker; data is kept in a backup folder unless --delete-data
+#   sudo reptracker-admin status | log
+#
+# update, restart and uninstall run detached (a systemd-run unit), so stopping the service doesn't stop them.
+# Their output goes to /opt/reptracker/task.log, which the Settings tab shows.
+set -uo pipefail
+
+NAME=reptracker
+HOME_DIR=/opt/reptracker
+APP="$HOME_DIR/app"
+VENV="$HOME_DIR/venv"
+ENV_FILE=/etc/reptracker.env
+LOG="$HOME_DIR/task.log"
+BRANCH_RE='^[A-Za-z0-9._][A-Za-z0-9._/-]{0,99}$'
+
+die() { echo "Error: $*" >&2; exit 1; }
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" | tee -a "$LOG"; }
+as_app() { runuser -u "$NAME" -- "$@"; }
+[ "$(id -u)" -eq 0 ] || die "Run it with sudo."
+
+cmd="${1:-help}"; shift || true
+
+# Long tasks re-run themselves as a transient systemd unit: the service restart (or stop) would otherwise kill them.
+detach() {
+  if [ -z "${REPTRACKER_DETACHED:-}" ] && [ -d /run/systemd/system ]; then
+    : > "$LOG"
+    systemd-run --quiet --collect --unit "reptracker-task-$(date +%s)" --setenv=REPTRACKER_DETACHED=1 \
+      /usr/local/sbin/reptracker-admin "$cmd" "$@" || die "Couldn't start the task."
+    echo "Started: $cmd $*. Progress: $LOG"
+    exit 0
+  fi
+  [ -n "${REPTRACKER_DETACHED:-}" ] || : > "$LOG"
+}
+
+case "$cmd" in
+  update)
+    branch="${1:-}"
+    [ -z "$branch" ] || printf '%s' "$branch" | grep -Eq "$BRANCH_RE" || die "Not a valid branch name: $branch"
+    detach "$@"
+    [ -n "$branch" ] || branch=$(as_app git -C "$APP" rev-parse --abbrev-ref HEAD)
+    log "Updating to $branch"
+    if ! as_app git -C "$APP" fetch --prune origin >>"$LOG" 2>&1; then log "FAILED: couldn't reach GitHub"; exit 1; fi
+    if ! as_app git -C "$APP" rev-parse --verify --quiet "origin/$branch" >/dev/null; then log "FAILED: no branch \"$branch\" on GitHub"; exit 1; fi
+    # Tracked files follow the branch; untracked and git-ignored files (Main data, profiles, account, keys) stay.
+    if ! as_app git -C "$APP" checkout -q -f -B "$branch" "origin/$branch" >>"$LOG" 2>&1; then log "FAILED: git checkout"; exit 1; fi
+    log "Now at $(as_app git -C "$APP" log -1 --format='%h %s')"
+    log "Installing Python packages"
+    if ! as_app "$VENV/bin/pip" install -q -r "$APP/src/website/requirements.txt" >>"$LOG" 2>&1; then log "WARNING: pip install failed; restarting with the packages already installed"; fi
+    want=$(sed -n 's/^INSTALLER_VERSION=//p' "$APP/src/pi/install.sh" | head -1)
+    have=$(sed -n 's/^REPTRACKER_INSTALLER_VERSION=//p' "$ENV_FILE" | head -1)
+    if [ -n "$want" ] && [ "$want" != "$have" ]; then
+      log "NOTE: this version changes the installation itself. Run the install command again on the Pi:"
+      log "  curl -fsSL https://raw.githubusercontent.com/jkozik72/RepTracker/main/src/pi/install.sh | sudo bash -s -- --branch $branch"
+    fi
+    log "Restarting"
+    systemctl restart "$NAME" && log "DONE" || log "FAILED: the service did not restart (sudo journalctl -u reptracker)"
+    ;;
+  restart)
+    detach "$@"
+    log "Restarting"
+    systemctl restart "$NAME" && log "DONE" || log "FAILED: the service did not restart (sudo journalctl -u reptracker)"
+    ;;
+  uninstall)
+    keep=1; [ "${1:-}" = "--delete-data" ] && keep=0
+    detach "$@"
+    LOG=/var/log/reptracker-uninstall.log   # /opt/reptracker goes away
+    : > "$LOG"
+    original=$(sed -n 's/^REPTRACKER_ORIGINAL_HOSTNAME=//p' "$ENV_FILE" 2>/dev/null | head -1)
+    log "Uninstalling RepTracker"
+    systemctl disable --now "$NAME" 2>/dev/null
+    if [ "$keep" = 1 ] && [ -d "$APP/src/website" ]; then
+      backup="/opt/reptracker-backup-$(date +%Y%m%d-%H%M%S)"
+      mkdir -p "$backup"
+      for d in data research; do [ -d "$APP/src/website/$d" ] && cp -a "$APP/src/website/$d" "$backup/"; done
+      chown -R root:root "$backup"; chmod 700 "$backup"
+      log "Data kept in $backup (copy data/ and research/ into src/website/ of a new install to restore it)"
+    fi
+    rm -f /etc/systemd/system/reptracker.service /etc/sudoers.d/reptracker "$ENV_FILE"
+    systemctl daemon-reload 2>/dev/null
+    rm -rf "$HOME_DIR"
+    userdel "$NAME" 2>/dev/null
+    if [ -n "$original" ] && [ "$(hostname)" = "$NAME" ]; then
+      hostnamectl set-hostname "$original" 2>/dev/null || { echo "$original" > /etc/hostname; hostname "$original"; }
+      sed -i "s/^127\.0\.1\.1.*/127.0.1.1\t$original/" /etc/hosts
+      systemctl restart avahi-daemon 2>/dev/null
+      log "Computer name back to \"$original\""
+    fi
+    log "DONE. System packages (git, python3, ffmpeg, avahi) were left installed."
+    rm -f /usr/local/sbin/reptracker-admin
+    ;;
+  status)
+    systemctl status "$NAME" --no-pager -n 0
+    as_app git -C "$APP" log -1 --format='Branch: %D%nCommit: %h %s (%cr)'
+    ;;
+  log)
+    cat "$LOG" 2>/dev/null
+    ;;
+  help|-h|--help)
+    sed -n '2,12p' "$0"
+    ;;
+  *)
+    die "Unknown command: $cmd (try: help)"
+    ;;
+esac
