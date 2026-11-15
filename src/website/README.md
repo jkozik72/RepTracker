@@ -21,6 +21,8 @@ On the local network, over HTTPS:
 
 It prints the addresses to open (for example `https://192.168.1.20:5000`); **Settings → Open on your phone** shows them with a QR code to scan. Use the IP address on Android, where `.local` names often don't work. Browsers warn once about the self-signed certificate (made once in `data/tls/`). Debug mode is off in this mode. There is no password reset: delete `data/auth.json` to remove the account (everyone is signed out) and create a new one on the next visit.
 
+**Automatic analysis and phone alerts** (Settings): the server analyses every Main-mode animal at a set interval, even with no page open, and sends each new alert to the phones and browsers that turned alerts on (D10). A phone needs the RepTracker certificate first (Settings → Open on your phone, D9).
+
 On a Raspberry Pi, one command installs it as a service at `https://reptracker.local`: see [src/pi/README.md](../pi/README.md). Settings then has update, restart and uninstall.
 
 ## Modes

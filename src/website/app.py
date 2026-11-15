@@ -7,6 +7,8 @@ from werkzeug.exceptions import HTTPException
 
 import auth
 import main
+import push
+import scheduler
 import system
 from main import RepTrackerError
 
@@ -20,6 +22,11 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_GB * 1024 ** 3   # streamed to a t
 
 @app.errorhandler(RepTrackerError)
 def handle_error(err):
+    return jsonify({"error": str(err)}), 400
+
+
+@app.errorhandler(push.PushError)
+def handle_push_error(err):
     return jsonify({"error": str(err)}), 400
 
 
@@ -138,6 +145,38 @@ def PhoneLinks():
              for a in sorted(auth.LanAddresses(), key=lambda a: a.startswith("100."))]
     links += [{"url": f"https://{n}{suffix}", "label": f"{n} (not on every Android phone)"} for n in auth.HostNames() if n.endswith(".local")]
     return {"lan": True, "links": links, "fingerprint": auth.AuthorityCertificate()[1]}
+
+
+# ---------- automatic analyses and phone alerts (D10) ----------
+
+@app.get("/api/schedule")
+def schedule_status():
+    return jsonify(scheduler.Status())
+
+
+@app.put("/api/schedule")
+def save_schedule():
+    return jsonify(scheduler.SaveSettings(request.get_json(force=True) or {}))
+
+
+@app.post("/api/push/subscribe")
+def push_subscribe():
+    body = request.get_json(force=True) or {}
+    return jsonify({"id": push.Subscribe(body.get("subscription"), body.get("name")), "devices": push.Devices()})
+
+
+@app.delete("/api/push/devices/<device_id>")
+def push_remove(device_id):
+    push.Unsubscribe(deviceId=device_id)
+    return jsonify({"devices": push.Devices()})
+
+
+@app.post("/api/push/test")
+def push_test():
+    sent = push.Send("RepTracker: test alert", "Alerts from RepTracker will look like this.", tag="test")
+    if not sent:
+        raise push.PushError("No device got it. Turn on alerts on a phone first (and check it can reach the internet).")
+    return jsonify({"sent": sent})
 
 
 @app.get("/manifest.webmanifest")
@@ -391,6 +430,7 @@ def ServeLan(port, redirectPort):
         from cheroot import wsgi
         from cheroot.ssl.builtin import BuiltinSSLAdapter
     except ImportError:
+        scheduler.Start()
         app.run(host="0.0.0.0", port=port, ssl_context=(cert, key), debug=False, threaded=True)
         return
     import threading
@@ -402,6 +442,7 @@ def ServeLan(port, redirectPort):
             return [b""]
         plain = wsgi.Server(("0.0.0.0", redirectPort), redirect_app, numthreads=2)
         threading.Thread(target=plain.safe_start, daemon=True).start()
+    scheduler.Start()
     server = wsgi.Server(("0.0.0.0", port), app, numthreads=16, timeout=600)
     server.ssl_adapter = BuiltinSSLAdapter(cert, key)
     server.safe_start()
@@ -418,4 +459,7 @@ if __name__ == "__main__":
     if args.lan:
         ServeLan(args.port, args.http_redirect)
     else:
+        import os
+        if os.environ.get("WERKZEUG_RUN_MAIN") == "true":   # the debug reloader's child: the one that serves
+            scheduler.Start()
         app.run(port=args.port, debug=True)   # this computer only (127.0.0.1)

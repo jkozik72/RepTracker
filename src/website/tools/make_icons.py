@@ -57,4 +57,6 @@ if __name__ == "__main__":
     Icon(512).save(OUT / "icon-512.png")
     Icon(512, art=0.62, rounded=False).save(OUT / "maskable-512.png")   # inside the 80% safe zone
     Icon(180, art=0.72, rounded=False).convert("RGB").save(OUT / "apple-touch-icon.png")
+    # Android's status bar shows notification badges as a white shape: the lizard alone, no background
+    Lizard().resize((96, 96), Image.LANCZOS).save(OUT / "badge-96.png")
     print("Wrote", ", ".join(sorted(p.name for p in OUT.glob("*.png"))))

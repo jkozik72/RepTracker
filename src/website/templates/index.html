@@ -238,6 +238,17 @@
   .ptable th, .ptable td { text-align: left; vertical-align: top; padding: 6px 8px; border-bottom: 1px solid var(--border); }
   .ptable th { font-size: 12px; color: var(--muted); font-weight: 600; }
   .ptable ul { margin: 0; padding-left: 16px; }
+  /* Phones: each table row becomes a card, each cell labelled with its column; facts two per row */
+  @media (max-width: 600px) {
+    .ptable, .ptable tbody, .ptable tr, .ptable td { display: block; width: 100%; }
+    .ptable thead { display: none; }
+    .ptable tr { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+    .ptable td { border: 0; padding: 3px 0; }
+    .ptable td[data-label]::before { content: attr(data-label); display: block; font-size: 12px; color: var(--muted); font-weight: 600; }
+    .ptable td:first-child { font-size: 15px; }
+    .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .facts .wide { grid-column: 1 / -1; }
+  }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .caution { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
   .profile textarea { font: 12.5px/1.45 ui-monospace, Consolas, monospace; min-height: 360px; }
@@ -485,8 +496,28 @@ window.swReady = ("serviceWorker" in navigator && window.isSecureContext)
         <p class="hint">One choice for this computer, used for analyses and questions in Toy and Main, with dev mode on or off.</p>
       </div>
 
-      <div>
-        <h2>AI polling</h2>
+      <div id="schedule-settings">
+        <h2>Automatic analysis and phone alerts</h2>
+        <div class="poll-row">
+          <label for="sched-interval" style="margin:0">Analyse each animal</label>
+          <select id="sched-interval"></select>
+          <label for="sched-images" style="margin:0">with</label>
+          <select id="sched-images" title="How many camera images each analysis sends, spread evenly over the interval"></select>
+        </div>
+        <p class="hint" id="sched-state">Loading…</p>
+        <p class="hint">Runs on the server, even with no page open: at each interval mark, every animal (Main mode) is analysed for the interval that just ended, with the AI provider in use. A real provider bills every call. Alerts are checked every minute.</p>
+        <div class="poll-row" style="margin-top:6px">
+          <button class="btn primary" type="button" id="alerts-on">Get alerts on this device</button>
+          <button class="btn" type="button" id="alerts-off" hidden>Turn off on this device</button>
+          <button class="btn" type="button" id="alerts-test" hidden>Send a test alert</button>
+        </div>
+        <p class="error" id="sched-error" hidden></p><p class="ok-msg" id="sched-ok" hidden></p>
+        <ul class="file-list" id="alert-devices"></ul>
+        <p class="hint">Phones and browsers with alerts on get a notification when an animal gets a new alert; it reads the alert. On a phone, install the RepTracker certificate first (below); on an iPhone, add RepTracker to the home screen and turn alerts on from there.</p>
+      </div>
+
+      <div id="page-polling">
+        <h2>Page polling (dev clock)</h2>
         <div class="poll-row">
           <label for="poll-interval" style="margin:0">Analyse each animal</label>
           <select id="poll-interval"></select>
@@ -495,7 +526,7 @@ window.swReady = ("serviceWorker" in navigator && window.isSecureContext)
           <button class="btn primary" type="button" id="poll-toggle">Start</button>
         </div>
         <p class="hint" id="poll-state">Stopped.</p>
-        <p class="hint">At each interval mark of the dashboard clock, every animal on the dashboard is analysed for the interval that just ended, with the AI provider in use. Runs while this page is open, and is stopped whenever the page loads. With the dev clock sped up, intervals (and calls) come faster. A real provider bills every call.</p>
+        <p class="hint">Dev mode: at each interval mark of the dashboard clock, every animal on the dashboard (Toy or Main) is analysed for the interval that just ended. Runs while this page is open, and is stopped whenever the page loads. With the dev clock sped up, intervals (and calls) come faster. A real provider bills every call.</p>
       </div>
       <div id="phone-settings">
         <h2>Open on your phone</h2>
@@ -1630,7 +1661,7 @@ addErr.addEventListener("click", e => {
 const tabs = [...document.querySelectorAll(".tab")];
 function selectTab(tab) {
   tabs.forEach(t => { const on = t === tab; t.setAttribute("aria-selected", on); t.tabIndex = on ? 0 : -1; document.getElementById(t.getAttribute("aria-controls")).hidden = !on; });
-  if (tab.id === "tab-settings") { loadAi(); loadSystem(); loadPhone(); }
+  if (tab.id === "tab-settings") { loadAi(); loadSystem(); loadPhone(); loadSchedule(); }
   if (tab.id === "tab-research") loadProfiles();   // re-check, e.g. after signing in to Google in a terminal
 }
 tabs.forEach(t => {
@@ -1756,6 +1787,82 @@ document.addEventListener("click", e => {
   if (remove) clearAskPhoto(remove.closest("form"));
 });
 
+/* Settings: automatic analysis (on the server) and phone alerts (D10). */
+let schedule = null;
+const PUSH_DEVICE = "reptracker.pushDevice";   // this browser's device id on the server, if alerts are on here
+const thisDevice = () => { try { return localStorage.getItem(PUSH_DEVICE); } catch { return null; } };
+async function loadSchedule() {
+  try { schedule = await readResponse(await fetch("/api/schedule")); } catch (x) { schedMessage("error", x.message); return; }
+  renderSchedule();
+}
+function renderSchedule() {
+  const s = schedule; if (!s) return;
+  $("#sched-interval").innerHTML = s.intervals.map(m => `<option value="${m}" ${m === s.intervalMinutes ? "selected" : ""}>${m ? (RANGE_PRESETS.find(([v]) => v === m) || [0, `${m} min`])[1].replace("Last ", "every ").replace("hour", "1 h") : "off"}</option>`).join("");
+  $("#sched-images").innerHTML = imageOptions(s.images ? String(s.images) : "");
+  $("#sched-images").disabled = !s.intervalMinutes;
+  const last = s.lastRun ? `Last run ${fmtShort(Date.parse(s.lastRun))}: ${s.lastResults.map(r => `${r.name} ${r.ok ? "✓" : "✗ " + r.message}`).join(", ") || "no animals"}. ` : "";
+  $("#sched-state").textContent = !s.serverRuns ? "The scheduler isn't running in this server process (it starts with app.py)."
+    : s.running ? "Analysing now…"
+    : s.intervalMinutes ? `${last}Next run ${fmtShort(Date.parse(s.nextRun))}.` : `Off: no automatic analyses. ${last}Alerts from sensors and feeding are still checked.`;
+  const mine = thisDevice(), here = s.devices.some(d => d.id === mine);
+  $("#alerts-on").hidden = here; $("#alerts-off").hidden = !here; $("#alerts-test").hidden = !s.devices.length;
+  $("#alert-devices").innerHTML = s.devices.map(d => `<li>${esc(d.name)}${d.id === mine ? " (this device)" : ""} <button type="button" class="file-del" data-push-remove="${esc(d.id)}" title="Stop alerts on ${esc(d.name)}" aria-label="Stop alerts on ${esc(d.name)}">×</button></li>`).join("");
+}
+function schedMessage(kind, text) {
+  $("#sched-error").hidden = $("#sched-ok").hidden = true;
+  if (text) { const el = $(kind === "ok" ? "#sched-ok" : "#sched-error"); el.textContent = text; el.hidden = false; }
+}
+async function saveSchedule() {
+  schedMessage();
+  const images = $("#sched-images").value;
+  try {
+    schedule = await readResponse(await fetch("/api/schedule", { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ intervalMinutes: +$("#sched-interval").value, images: images ? +images : null }) }));
+    renderSchedule(); schedMessage("ok", schedule.intervalMinutes ? "Saved. The server analyses at each interval mark." : "Automatic analyses are off.");
+  } catch (x) { schedMessage("error", x.message); loadSchedule(); }
+}
+$("#sched-interval").addEventListener("change", saveSchedule);
+$("#sched-images").addEventListener("change", saveSchedule);
+const deviceName = () => /iPhone|iPad/.test(navigator.userAgent) ? "iPhone" : /Android/.test(navigator.userAgent) ? "Android phone"
+  : `${/Edg\//.test(navigator.userAgent) ? "Edge" : /Firefox/.test(navigator.userAgent) ? "Firefox" : "Chrome"} on ${/Windows/.test(navigator.userAgent) ? "Windows" : /Mac/.test(navigator.userAgent) ? "Mac" : "a computer"}`;
+const keyBytes = b64 => Uint8Array.from(atob((b64 + "===".slice((b64.length + 3) % 4)).replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+$("#alerts-on").addEventListener("click", async () => {
+  schedMessage();
+  if (!(await window.swReady) || !("PushManager" in window)) {
+    schedMessage("error", /iPhone|iPad/.test(navigator.userAgent) && !navigator.standalone
+      ? "On an iPhone, alerts work from the home-screen app: install the certificate, Add to Home Screen, then turn alerts on there."
+      : "This browser can't get alerts yet: install the RepTracker certificate first (Open on your phone, below), then reopen RepTracker.");
+    return;
+  }
+  if (await Notification.requestPermission() !== "granted") { schedMessage("error", "Notifications are blocked for RepTracker in this browser's settings."); return; }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription() || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(schedule.publicKey) });
+    const res = await readResponse(await fetch("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription: sub.toJSON(), name: deviceName() }) }));
+    try { localStorage.setItem(PUSH_DEVICE, res.id); } catch {}
+    schedule.devices = res.devices; renderSchedule(); schedMessage("ok", "Alerts are on for this device. Use Send a test alert to check.");
+  } catch (x) { schedMessage("error", `Couldn't turn alerts on: ${x.message}`); }
+});
+async function removeDevice(id) {
+  const res = await readResponse(await fetch(`/api/push/devices/${encodeURIComponent(id)}`, { method: "DELETE" }));
+  if (id === thisDevice()) {
+    try { localStorage.removeItem(PUSH_DEVICE); } catch {}
+    try { const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription(); await sub?.unsubscribe(); } catch {}
+  }
+  schedule.devices = res.devices; renderSchedule();
+}
+$("#alerts-off").addEventListener("click", () => removeDevice(thisDevice()).then(() => schedMessage("ok", "Alerts are off for this device.")).catch(x => schedMessage("error", x.message)));
+$("#alert-devices").addEventListener("click", e => {
+  const b = e.target.closest("[data-push-remove]"); if (!b) return;
+  removeDevice(b.dataset.pushRemove).catch(x => schedMessage("error", x.message));
+});
+$("#alerts-test").addEventListener("click", async () => {
+  schedMessage();
+  try { const r = await readResponse(await fetch("/api/push/test", { method: "POST" })); schedMessage("ok", `Sent to ${r.sent} device${r.sent === 1 ? "" : "s"}.`); }
+  catch (x) { schedMessage("error", x.message); }
+});
+
 /* Settings: open on your phone. The server lists its own network addresses and draws the QR code. */
 async function loadPhone() {
   let info;
@@ -1873,6 +1980,7 @@ $("#sys-uninstall-form").addEventListener("submit", e => {
 function renderSettings() {
   $("#dev-mode").checked = settings.devMode;
   $("#dev-settings").hidden = !settings.devMode;
+  $("#page-polling").hidden = !settings.devMode;
   document.querySelectorAll("#mode-toggle button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === settings.mode));
   document.querySelectorAll("[data-mode-name]").forEach(el => el.textContent = `· ${mode()} mode`);
   for (const kind of ["videos", "sensors"]) {
@@ -2136,7 +2244,7 @@ const rng = (r, unit = "") => r.min === r.max ? `${+r.min.toFixed(1)}${unit}` : 
 const URGENCY = { monitor: "ok", "vet soon": "warn", emergency: "bad" };
 function renderProfile(rec) {
   const p = rec.profile, t = p.temperaturesF;
-  const fact = (k, v) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`;
+  const fact = (k, v) => `<div${String(v ?? "").length > 22 ? ' class="wide"' : ""}><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`;   // long ones: full width on phones
   return `<article class="card profile">
     <div class="profile-head">
       <div><h2>${esc(p.commonName)}</h2><div class="sci" style="font-style:italic;color:var(--muted)">${esc(p.scientificName)}</div>
@@ -2163,14 +2271,14 @@ function renderProfile(rec) {
     <div><h2>Checked in every analysis</h2>
       <p class="hint" style="margin:0 0 6px">Always: visible, activity (the list above), body condition, eating, droppings, food dish, hazards and the conditions below. Plus these checks for this species; red answers raise an alert on the dashboard.</p>
       ${p.trackedStats?.length ? `<table class="ptable"><thead><tr><th>Check</th><th>What the AI looks for</th><th>Answers</th></tr></thead><tbody>
-        ${p.trackedStats.map(t => `<tr><td><strong>${esc(t.label)}</strong></td><td>${esc(t.question)}</td>
-          <td><div class="chips">${t.options.map(o => `<span class="pill ${t.concernOptions.includes(o) ? "bad" : o === t.options[0] ? "ok" : "none"}">${esc(o)}</span>`).join("")}</div></td></tr>`).join("")}
+        ${p.trackedStats.map(t => `<tr><td><strong>${esc(t.label)}</strong></td><td data-label="What the AI looks for">${esc(t.question)}</td>
+          <td data-label="Answers"><div class="chips">${t.options.map(o => `<span class="pill ${t.concernOptions.includes(o) ? "bad" : o === t.options[0] ? "ok" : "none"}">${esc(o)}</span>`).join("")}</div></td></tr>`).join("")}
       </tbody></table>` : `<p class="caution" style="margin:0">This profile has no species checks (it was made before they existed). Regenerate it to get them.</p>`}
     </div>
     <div><h2>Body condition</h2><dl class="facts">${fact("Healthy", p.bodyCondition.healthy)}${fact("Underweight", p.bodyCondition.underweight)}${fact("Overweight", p.bodyCondition.overweight)}</dl></div>
     <div><h2>Conditions to watch for</h2><table class="ptable"><thead><tr><th>Condition</th><th>Visible signs</th><th>Urgency</th><th>Notes</th></tr></thead><tbody>
-      ${p.conditions.map(c => `<tr><td><strong>${esc(c.name)}</strong></td><td><ul>${c.visibleSigns.map(v => `<li>${esc(v)}</li>`).join("")}</ul></td>
-        <td><span class="pill ${URGENCY[c.urgency] || "none"}">${esc(c.urgency)}</span></td><td>${esc(c.notes)}</td></tr>`).join("")}</tbody></table></div>
+      ${p.conditions.map(c => `<tr><td><strong>${esc(c.name)}</strong></td><td data-label="Visible signs"><ul>${c.visibleSigns.map(v => `<li>${esc(v)}</li>`).join("")}</ul></td>
+        <td data-label="Urgency"><span class="pill ${URGENCY[c.urgency] || "none"}">${esc(c.urgency)}</span></td><td data-label="Notes">${esc(c.notes)}</td></tr>`).join("")}</tbody></table></div>
     ${p.sexNotes ? `<div><h2>Males and females</h2>
       <p style="margin:0 0 6px"><strong>Telling them apart:</strong> ${esc(p.sexNotes.howToTell)}</p>
       <dl class="facts">${["female", "male"].map(sx => `<div><dt>${sx === "female" ? "Females" : "Males"}</dt><dd style="font-weight:400">${esc(p.sexNotes[sx]?.notes || "—")}
