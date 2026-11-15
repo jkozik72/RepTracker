@@ -18,6 +18,7 @@ Every open question in one place. Add rows at the bottom with the next ID; never
 | Q16 | Which videos do we use, and in what form: source, length, resolution, frame rate, top or side view, the JSON that lists the cameras? | Motion tracking is designed and tested on them. | One video filmed by the team; others found online. | [brief § Inputs][b-inputs] (s. 23); [board § Add lizard][s-add], 2026-11-14 |
 | Q17 | How does a finite video map onto dashboard time: played once, looped, sped up? | The movement graph is meant to show movement throughout the day, and the dashboard should look real-time. | TBD | [brief § Product][b-product] (s. 3), [§ Inputs][b-inputs] (s. 25–28), 2026-11-14 |
 | Q19 | What are "previous data" in the add-lizard form and "AI questions" on the dashboard? | Both are UI elements that no source describes. | TBD | [brief § Web app][b-web] (s. 21); [UI board § Dashboard][u-dash], [§ Add lizard form][u-form], 2026-11-14 |
+| Q21 | How does a live Pi camera feed RepTracker, and how long are its pictures kept? | Decides storage, what the AI and the dashboard get, and the Pi's load. | A: rolling ~1 h H.264 video buffer; B: one still per minute in a circular buffer; C: frame store: 5 fps MJPEG from `rpicam-vid`, newest frame shown live, one JPEG every 10 s kept 72 h (built on `src/live-camera`); D: C plus an H.264 buffer. Owner leans to A. | [live camera chat](notes/2026-11-15-live-camera-chat.md) |
 
 ## Answered
 

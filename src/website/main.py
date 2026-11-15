@@ -1,8 +1,9 @@
 """RepTracker core: lizard configs, simulated camera and sensors, prompt bundles, AI providers.
 
-There are no real cameras or sensors. A camera is a video in media/videos/ and a sensor is a
-JSON time series in media/sensors/: {"t": <ms between samples>, "value": [samples...]}.
-Both start at the lizard's createdAt time and loop when they run out.
+A camera is either a video in media/videos/ (simulated: it starts at the lizard's createdAt time and
+loops) or this computer's live camera (camera.py: stored frames keyed by the time they were captured).
+Sensors are simulated: a JSON time series in media/sensors/: {"t": <ms between samples>, "value": [samples...]},
+starting at createdAt and looping when it runs out.
 
 Two separate data sets, each under data/<mode>/:
 - toy:  sample lizards, videos and sensors, for trying things out
@@ -28,6 +29,7 @@ import imageio_ffmpeg
 from PIL import Image, ImageDraw, ImageOps
 
 import ai
+import camera as livecamera
 import claude_ai
 import research
 
@@ -130,6 +132,7 @@ def ListMedia(mode):
         "sensors": sorted(set(defaults) | {p.stem for p in SensorsDir(mode).glob("*.json")}),
         "defaultSensors": defaults,
         "sampleVideos": sorted(SAMPLE_VIDEOS.get(mode, set())),
+        "liveCamera": livecamera.CameraStatus()["device"] != "off",
     }
 
 
@@ -145,7 +148,7 @@ def DeleteVideo(mode, name):
         raise RepTrackerError(f"There is no video '{name}' in {mode} mode.")
     if name in SAMPLE_VIDEOS.get(mode, set()):
         raise RepTrackerError(f"'{name}' is a sample video that comes with the app; it can't be deleted.")
-    users = [l["config"]["name"] for l in ListLizards(mode) if l["config"]["camera"]["video"] == name]
+    users = [l["config"]["name"] for l in ListLizards(mode) if l["config"]["camera"].get("video") == name]
     if users:
         raise RepTrackerError(f"'{name}' is the camera of {', '.join(users)}. Remove "
                               f"{'that lizard' if len(users) == 1 else 'those lizards'} first, then delete the video.")
@@ -335,16 +338,27 @@ def LizardConfigFromForm(mode, formData, createdAt):
         "sex": _Choice(formData.get("sex") or "unknown", SEXES, "Sex"),
         "enclosureWidthCm": width,
         "createdAt": createdAt,
-        "camera": {
-            "view": _Choice(camera.get("view"), CAMERA_VIEWS, "Camera view"),
-            "video": _Choice(camera.get("video"), media["videos"], "Camera video"),
-        },
+        "camera": CameraFromForm(camera, media),
         "sensors": {
             "hotSide": hotSide,
             "hot": Sensor("hot", "Hot side"),
             "cold": Sensor("cold", "Cold side"),
         },
     }
+
+
+def IsLiveCamera(config):
+    return config["camera"].get("source") == "live"
+
+
+def CameraFromForm(camera, media):
+    """The camera part of a lizard's config: a video file {view, video}, or {view, source: "live", video: None}."""
+    view = _Choice(camera.get("view"), CAMERA_VIEWS, "Camera view")
+    if camera.get("source") == "live":
+        if not media["liveCamera"]:
+            raise RepTrackerError("This computer has no live camera turned on.")
+        return {"view": view, "source": "live", "video": None}
+    return {"view": view, "video": _Choice(camera.get("video"), media["videos"], "Camera video")}
 
 
 def CreateNewLizard(mode, formData):
@@ -470,6 +484,24 @@ def VideoDurationSeconds(mode, name):
     return secs
 
 
+def LiveFrame(t):
+    """The live camera's stored frame nearest t (within camera.FIND_WITHIN_S) that opens as an image,
+    as (frameTime, path), or None. A damaged file (cut short by a power cut) is skipped."""
+    for frameTime, path in livecamera.FrameCandidates(t):
+        try:
+            with Image.open(path) as img:
+                img.verify()
+            return frameTime, path
+        except Exception:
+            continue
+    return None
+
+
+def OpenLiveFrame(path):
+    with Image.open(path) as img:
+        return img.convert("RGB")
+
+
 def TakeAPicture(mode, videoName, videoSeconds):
     """Grab one frame from the camera video at videoSeconds; returns a PIL image."""
     cmd = [imageio_ffmpeg.get_ffmpeg_exe(), "-loglevel", "error", "-ss", f"{videoSeconds:.2f}",
@@ -529,11 +561,12 @@ def GeneratePrompts(mode, lizardId, startIso, endIso, imageCount=None):
     if minutes > MAX_RANGE_MIN:
         raise RepTrackerError(f"Ranges are limited to {MAX_RANGE_MIN // 60} h ({MAX_RANGE_MIN} images).")
 
+    live = IsLiveCamera(config)
     video = config["camera"]["video"]
-    duration = VideoDurationSeconds(mode, video)
-    # One pass of the looping video at most, so no video moment is sent twice.
+    duration = None if live else VideoDurationSeconds(mode, video)
+    # One pass of the looping video at most, so no video moment is sent twice. A live camera never loops.
     requestedMinutes = minutes
-    trimmed = minutes * 60 > duration
+    trimmed = not live and minutes * 60 > duration
     if trimmed:
         minutes = max(1, int(duration // 60))
         start = end - timedelta(minutes=minutes)
@@ -552,6 +585,17 @@ def GeneratePrompts(mode, lizardId, startIso, endIso, imageCount=None):
     spacing = (end - start) / count if count < perMinute else timedelta(minutes=1)
     imageTimes = [start + spacing * i for i in range(count)]
     spacingMin = spacing.total_seconds() / 60
+    liveFrames, missing = {}, 0
+    if live:   # find every picture first: minutes with none are left out
+        for t in imageTimes:
+            found = LiveFrame(t)
+            if found:
+                liveFrames[t] = found
+        missing = len(imageTimes) - len(liveFrames)
+        if not liveFrames:
+            raise RepTrackerError(f"The live camera has no pictures from {LabelTime(start)} to {LabelTime(end)}. "
+                                  f"It keeps the last {livecamera.KEEP_HOURS} h; check that it is running.")
+        imageTimes = [t for t in imageTimes if t in liveFrames]
     hotSide = config["sensors"]["hotSide"]
     common = {
         "name": config["name"], "species": config["species"],
@@ -592,13 +636,19 @@ def GeneratePrompts(mode, lizardId, startIso, endIso, imageCount=None):
     for n, group in enumerate(groups, 1):
         images, labels, frames = [], [], []
         for t in group:
-            videoS = SourceOffsetSeconds(config, t) % duration
-            img = TakeAPicture(mode, video, min(videoS, max(duration - 0.5, 0)))
             frame = f"frames/{t.strftime('%Y%m%d-%H%M')}.jpg"
+            if live:
+                capturedAt, path = liveFrames[t]
+                img = OpenLiveFrame(path)
+                where = {"capturedAt": FormatTime(capturedAt)}
+            else:
+                videoS = SourceOffsetSeconds(config, t) % duration
+                img = TakeAPicture(mode, video, min(videoS, max(duration - 0.5, 0)))
+                where = {"videoSeconds": round(videoS, 1)}
             img.save(folder / frame, quality=85)
             images.append(img)
             labels.append(LabelTime(t))
-            frames.append({"time": FormatTime(t), "label": LabelTime(t), "videoSeconds": round(videoS, 1), "file": frame})
+            frames.append({"time": FormatTime(t), "label": LabelTime(t), **where, "file": frame})
         pdf = f"images-{n:02d}.pdf"
         ParsePDF(images, labels, folder / pdf)
         text = f"images-{n:02d}.txt"
@@ -610,6 +660,8 @@ def GeneratePrompts(mode, lizardId, startIso, endIso, imageCount=None):
         chunks.append({"type": "images", "text": text, "pdf": pdf, "frames": frames})
 
     notes = []
+    if missing:
+        notes.append(f"{missing} of {missing + len(imageTimes)} image times had no live camera picture and were left out.")
     if trimmed:
         notes.append(f"Video '{video}' is {duration / 60:.1f} min, shorter than the {requestedMinutes:.0f}-min range, and it loops. "
                      f"So no moment is sent twice, only the last {minutes:.0f} min ({LabelTime(start)} to {LabelTime(end)}) were analysed.")
@@ -824,14 +876,31 @@ def SendPrompt(mode, lizardId, bundleId):
     return entry
 
 
+def LivePictureAt(now):
+    """The live camera's picture for now: the newest frame when it is fresh and now is not before it
+    (the browser's clock may run ahead of this computer's), else the stored frame nearest now; or None."""
+    latest = livecamera.LatestFrame()
+    if latest:
+        age = (now - latest[0]).total_seconds()
+        if age >= -livecamera.FRESH_S and (datetime.now(timezone.utc) - latest[0]).total_seconds() <= livecamera.FRESH_S:
+            return Image.open(io.BytesIO(latest[1])).convert("RGB")
+    found = LiveFrame(now)
+    return OpenLiveFrame(found[1]) if found else None
+
+
 def CurrentPicture(mode, config, now, maxWidth=1280):
     """The camera picture at this moment, as JPEG bytes, for a question with vision."""
     offset = SourceOffsetSeconds(config, now)
     if offset is None:
         raise RepTrackerError(f"{config['name']}'s camera starts at {LabelTime(ParseTime(config['createdAt']))}; there is no picture yet.")
-    video = config["camera"]["video"]
-    duration = VideoDurationSeconds(mode, video)
-    img = TakeAPicture(mode, video, min(offset % duration, max(duration - 0.5, 0)))
+    if IsLiveCamera(config):
+        img = LivePictureAt(now)
+        if img is None:
+            raise RepTrackerError(f"The live camera has no picture for {LabelTime(now)}.")
+    else:
+        video = config["camera"]["video"]
+        duration = VideoDurationSeconds(mode, video)
+        img = TakeAPicture(mode, video, min(offset % duration, max(duration - 0.5, 0)))
     if img.width > maxWidth:
         img = img.resize((maxWidth, round(maxWidth * img.height / img.width)))
     out = io.BytesIO()
@@ -882,7 +951,13 @@ def AskQuestion(mode, lizardId, question, nowIso, vision=False, photo=None):
         image = KeeperPhoto(photo)
         note = "A photo the keeper took or attached is included (not from the enclosure camera). Use it to answer."
     else:
-        image = CurrentPicture(mode, config, now) if vision and SourceOffsetSeconds(config, now) is not None else None
+        image = None
+        if vision and SourceOffsetSeconds(config, now) is not None:
+            try:
+                image = CurrentPicture(mode, config, now)
+            except RepTrackerError:
+                if not IsLiveCamera(config):
+                    raise   # a live camera with no picture: ask without one
         note = f"A picture from the camera at {LabelTime(now)} is attached. Use it to answer." if image else "No picture is attached."
     prompt = FillTemplate("ask.txt", {
         "image_note": note,

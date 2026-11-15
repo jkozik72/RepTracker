@@ -1,11 +1,13 @@
 import argparse
 import json
+import os
 from datetime import timedelta
 
 from flask import Flask, jsonify, redirect, render_template, request, send_from_directory, session
 from werkzeug.exceptions import HTTPException
 
 import auth
+import camera
 import main
 import push
 import scheduler
@@ -17,7 +19,7 @@ app.secret_key = auth.SecretKey()
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Strict",
                   PERMANENT_SESSION_LIFETIME=timedelta(days=30))
 MAX_UPLOAD_GB = 3
-app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_GB * 1024 ** 3   # streamed to a temp file, then to disk
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_GB * 1024 ** 3   # streamed straight to disk (main.SaveUpload)
 
 
 @app.errorhandler(RepTrackerError)
@@ -258,6 +260,71 @@ def video(mode, name):
     return send_from_directory(main.VideosDir(mode), name)
 
 
+# ---------- the live camera (one per computer) ----------
+
+@app.get("/api/camera")
+def camera_status():
+    return jsonify(camera.CameraStatus())
+
+
+@app.put("/api/camera/settings")
+def camera_settings():
+    """Save the camera's picture settings (focus, exposure, white balance, brightness, contrast) and apply them."""
+    try:
+        camera.SaveCameraSettings(request.get_json(force=True) or {})
+    except ValueError as err:
+        raise RepTrackerError(str(err))
+    return jsonify(camera.CameraStatus())
+
+
+@app.get("/media/camera/stream")
+def camera_stream():
+    """The live camera as an MJPEG stream (multipart/x-mixed-replace): every frame is pushed as the camera makes
+    it, so an <img> shows the camera's full frame rate without a request per picture. Ends after 10 s without a
+    frame; the page then starts it again."""
+    if not camera.OpenStream():
+        return jsonify({"error": f"Too many live views open (at most {camera.MAX_STREAMS}); close some tabs."}), 503
+
+    def Frames():
+        last = None
+        while True:
+            frame = camera.WaitForFrame(last, timeout=10)
+            if frame is None:
+                return
+            last = frame[0]
+            yield b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n%s\r\n" % (len(frame[1]), frame[1])
+    response = app.response_class(Frames(), mimetype="multipart/x-mixed-replace; boundary=frame",
+                                  headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+    response.call_on_close(camera.CloseStream)   # runs however the response ends, even before the first frame
+    return response
+
+
+@app.get("/media/camera/picture")
+def camera_picture():
+    """The live camera's picture as JPEG: the newest frame (if under camera.FRESH_S old), or with ?t=<ISO time>
+    the stored frame nearest t. Any other query (the page adds &n=<counter>) is ignored; it only defeats caching."""
+    t = request.args.get("t")
+    if t:
+        # A stored frame; a time at or after the newest frame (the browser's clock ahead of this computer's,
+        # or the dev clock run forward) gets the newest frame, as long as the camera is live.
+        when = main.ParseTime(t)
+        found = main.LiveFrame(when)
+        latest = camera.LatestFrame()
+        if found:
+            data = found[1].read_bytes()
+        elif (latest and when >= latest[0] - main.timedelta(seconds=camera.FRESH_S)
+              and (main.datetime.now(main.timezone.utc) - latest[0]).total_seconds() <= camera.FRESH_S):
+            data = latest[1]
+        else:
+            return jsonify({"error": "No camera picture for that time."}), 404
+    else:
+        latest = camera.LatestFrame()
+        if not latest or (main.datetime.now(main.timezone.utc) - latest[0]).total_seconds() > camera.FRESH_S:
+            return jsonify({"error": camera.CameraStatus()["error"] or "No picture from the camera right now."}), 404
+        data = latest[1]
+    return app.response_class(data, mimetype="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
 @app.get("/media/<mode>/sensors/<path:name>")
 def sensor(mode, name):
     path = main.SensorPath(mode, name.removesuffix(".json"))   # mode upload, else shared default
@@ -443,7 +510,8 @@ def ServeLan(port, redirectPort):
         plain = wsgi.Server(("0.0.0.0", redirectPort), redirect_app, numthreads=2)
         threading.Thread(target=plain.safe_start, daemon=True).start()
     scheduler.Start()
-    server = wsgi.Server(("0.0.0.0", port), app, numthreads=16, timeout=600)
+    # Each open live camera view holds a thread for its stream (camera.MAX_STREAMS), so there are plenty.
+    server = wsgi.Server(("0.0.0.0", port), app, numthreads=48, timeout=600)
     server.ssl_adapter = BuiltinSSLAdapter(cert, key)
     server.safe_start()
 
@@ -455,7 +523,12 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=5000)
     parser.add_argument("--http-redirect", type=int, default=0, metavar="PORT",
                         help="with --lan: also listen on this plain-HTTP port, only to redirect to HTTPS (0 = off)")
+    parser.add_argument("--camera", choices=camera.DEVICES, default=os.environ.get("REPTRACKER_CAMERA", "off"),
+                        help="live camera: off, pi (Raspberry Pi camera through rpicam-vid) or test (replays a toy video)")
     args = parser.parse_args()
+    # Not in the debug reloader's parent process, which only watches files: the camera has one owner.
+    if args.lan or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        camera.StartCamera(args.camera)
     if args.lan:
         ServeLan(args.port, args.http_redirect)
     else:

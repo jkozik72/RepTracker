@@ -78,6 +78,7 @@ case "$cmd" in
     if [ "$keep" = 1 ] && [ -d "$APP/src/website" ]; then
       backup="/opt/reptracker-backup-$(date +%Y%m%d-%H%M%S)"
       mkdir -p "$backup"
+      rm -rf "$APP/src/website/data/camera"   # gigabytes of camera pictures: not worth a backup
       for d in data research; do [ -d "$APP/src/website/$d" ] && cp -a "$APP/src/website/$d" "$backup/"; done
       chown -R root:root "$backup"; chmod 700 "$backup"
       log "Data kept in $backup (copy data/ and research/ into src/website/ of a new install to restore it)"

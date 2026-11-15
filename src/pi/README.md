@@ -40,8 +40,28 @@ Running the install command again also updates, and applies changes to the insta
 |---|---|
 | `/opt/reptracker/app` | The repository; data in `src/website/data/` and `research/` (kept across updates) |
 | `/opt/reptracker/venv` | Python packages |
-| `/etc/reptracker.env` | Port, redirect port, the Pi's old name |
+| `/etc/reptracker.env` | Port, redirect port, the Pi's old name, the camera (`REPTRACKER_CAMERA`, `REPTRACKER_CAMERA_ARGS`) |
+| `/opt/reptracker/app/src/website/data/camera/frames/` | Live camera pictures, one per 10 s, kept 72 h |
 | `/etc/systemd/system/reptracker.service` | The service (user `reptracker`) |
 | `/usr/local/sbin/reptracker-admin`, `/etc/sudoers.d/reptracker` | The admin command and the one sudo rule that lets the app run it |
 
 Updates reset tracked files (for example Toy mode's sample animals); Main data, profiles, the account and keys are untracked or git-ignored and stay.
+
+## Live camera (Pi Camera Module 3)
+
+The installer installs `rpicam-vid` if it is missing, adds `reptracker` to group `video`, and sets `REPTRACKER_CAMERA=pi`. Then **Add animal → Camera → Source: Camera**, where its picture settings (focus, exposure, white balance, brightness, contrast) are set with a live preview. Settings → Update does not change the service or `/etc/reptracker.env`: run the install command again.
+
+- A Pi 5 needs the **Standard–Mini** camera cable (the camera comes with a Standard–Standard one). Power off before plugging it in.
+- Check the camera before RepTracker:
+
+```
+rpicam-hello --list-cameras
+rpicam-still -n -t 2000 -o /tmp/test.jpg
+sudo -u reptracker rpicam-vid -n -t 3000 --codec mjpeg --mode 2304:1296 --width 1280 --height 720 --framerate 5 -o - | wc -c
+timedatectl
+```
+
+The first must list `imx708`; the third prints about a million bytes (0: check group `video`); `timedatectl` must say the clock is synchronized.
+
+- Filming a laptop screen about 30 cm away, a starting point (not yet tried on the Pi): Focus manual at 3.0, Exposure manual with shutter 16.7 ms and gain 1, White balance daylight. Until settings are saved in the form, `REPTRACKER_CAMERA_ARGS` in `/etc/reptracker.env` is used.
+- Without a camera (any computer): `python app.py --camera test` replays a toy video as the live camera.

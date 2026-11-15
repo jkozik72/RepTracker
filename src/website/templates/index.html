@@ -96,7 +96,7 @@
   .lizard-name { font-size: 20px; font-weight: 700; margin: 0; display: inline; }
   .lizard-meta { color: var(--muted); font-size: 14px; margin-left: 8px; }
   .video { aspect-ratio: 16 / 9; background: #0d0f0c; border-radius: 10px; overflow: hidden; position: relative; display: grid; place-items: center; color: #9aa294; font-size: 14px; }
-  .video video { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .video video, .video img[data-live] { width: 100%; height: 100%; object-fit: contain; display: block; }
   .video .badge { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,.62); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; letter-spacing: .03em; font-variant-numeric: tabular-nums; }
   .video .badge.r { left: auto; right: 8px; }
   .video .badge { max-width: calc(50% - 12px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -176,6 +176,13 @@
   .add-form fieldset { grid-column: 1 / -1; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin: 0; display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .add-form legend { font-weight: 700; padding: 0 6px; }
   .add-form fieldset .full { grid-column: 1 / -1; }
+  .cam-settings { grid-column: 1 / -1; display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .cam-settings[hidden] { display: none; }
+  .cam-preview { aspect-ratio: 16 / 9; background: #0d0f0c; border-radius: 8px; overflow: hidden; display: grid; place-items: center; color: #9aa294; font-size: 13px; }
+  .cam-preview img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .cam-controls { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .cam-controls input[type=range] { width: 100%; }
+  @media (max-width: 720px) { .cam-settings, .cam-controls { grid-template-columns: minmax(0, 1fr); } }
   .pair { display: grid; grid-template-columns: minmax(0, 1fr) 100px; gap: 6px; }
   .radios { display: flex; gap: 16px; padding-top: 6px; }
   .radios label { display: inline-flex; gap: 6px; align-items: center; font-weight: 500; margin: 0; }
@@ -414,8 +421,46 @@ window.swReady = ("serviceWorker" in navigator && window.isSecureContext)
             <p class="hint">Position is left → right in both views (0 cm = left wall).</p>
           </div>
           <div>
+            <span class="label" id="source-label">Source</span>
+            <div class="radios" role="radiogroup" aria-labelledby="source-label">
+              <label><input type="radio" name="source" value="video" checked> Video</label>
+              <label><input type="radio" name="source" value="live" id="f-source-live"> Camera</label>
+            </div>
+            <p class="hint" id="f-source-hint">A recorded video, or this computer's live camera.</p>
+          </div>
+          <div data-source="video">
             <label for="f-video">Video</label>
             <select id="f-video" name="video" data-media="videos"></select>
+          </div>
+          <div class="cam-settings" data-source="live" hidden>
+            <div>
+              <div class="cam-preview" id="cam-preview"><span>Waiting for the camera…</span></div>
+              <p class="hint">One camera per computer: these settings apply to every animal that uses it. Apply shows the change in a few seconds.</p>
+            </div>
+            <div class="cam-controls">
+              <div class="full" style="grid-column:1/-1"><label for="c-fps">Live frame rate (frames per second)</label>
+                <input id="c-fps" name="camFps" type="number" min="1" max="30" step="1">
+                <p class="hint" style="margin:0">How smooth the live picture is: 1 to 30. Higher uses more of the Pi's CPU and the network. Analyses still use one picture per minute.</p></div>
+              <div><label for="c-focus">Focus</label>
+                <select id="c-focus" name="camFocus"><option value="manual">Manual</option><option value="auto">Auto (continuous)</option></select></div>
+              <div><label for="c-lens">Focus distance (dioptres)</label>
+                <input id="c-lens" name="camLens" type="number" min="0" max="10" step="0.1"><p class="hint" style="margin:0">0 = far · 2 = 50 cm · 3.3 = 30 cm</p></div>
+              <div><label for="c-exposure">Exposure</label>
+                <select id="c-exposure" name="camExposure"><option value="auto">Auto</option><option value="manual">Manual</option></select></div>
+              <div data-exposure="auto"><label for="c-ev">Exposure compensation (EV)</label>
+                <input id="c-ev" name="camEv" type="number" min="-8" max="8" step="0.5"></div>
+              <div data-exposure="manual" hidden><label for="c-shutter">Shutter (ms)</label>
+                <input id="c-shutter" name="camShutter" type="number" min="0.1" max="200" step="0.1"><p class="hint" style="margin:0">16.7 ms stops banding on a 60 Hz screen</p></div>
+              <div data-exposure="manual" hidden><label for="c-gain">Gain</label>
+                <input id="c-gain" name="camGain" type="number" min="1" max="16" step="0.1"></div>
+              <div><label for="c-awb">White balance</label><select id="c-awb" name="camAwb"></select></div>
+              <div><label for="c-brightness">Brightness <span data-out="camBrightness"></span></label>
+                <input id="c-brightness" name="camBrightness" type="range" min="-1" max="1" step="0.05"></div>
+              <div><label for="c-contrast">Contrast <span data-out="camContrast"></span></label>
+                <input id="c-contrast" name="camContrast" type="range" min="0" max="4" step="0.05"></div>
+              <div style="align-self:end"><button class="btn" type="button" id="cam-apply">Apply to camera</button>
+                <p class="hint" id="cam-msg" style="margin:0"></p></div>
+            </div>
           </div>
         </fieldset>
 
@@ -839,7 +884,9 @@ const STATUS_LABEL = { ok: "Healthy", warn: "Watch", bad: "Alert", none: "Not an
 function renderSummary() {
   const el = $("#summary");
   if (!lizards.length) {
-    el.innerHTML = `<span class="summary-count">No animals yet</span><span class="hint" style="margin:0">${mode() === "main" && !media.videos.length
+    el.innerHTML = `<span class="summary-count">No animals yet</span><span class="hint" style="margin:0">${mode() === "main" && media.liveCamera
+      ? "Main mode starts empty. Add an animal below and pick Camera as its source."
+      : mode() === "main" && !media.videos.length
       ? "Main mode starts empty. Turn on dev mode in Settings to upload a camera video (default sensor files are built in), then add an animal below."
       : "Add one below to start tracking."}</span>`;
     return;
@@ -877,9 +924,12 @@ function aiStatsHtml(l) {
 }
 
 function renderVideoBox(c, fullscreen = false) {
+  const live = c.camera.source === "live";
   return `<div class="video">
-      <video src="/media/${mode()}/videos/${encodeURIComponent(c.camera.video)}.mp4" muted playsinline preload="auto" data-video></video>
-      <span class="badge" data-cam-time></span><span class="badge r" title="Source: ${esc(c.camera.video)}.mp4">Source: ${esc(c.camera.video)}</span>
+      ${live ? `<img data-live alt="Live camera picture">`
+             : `<video src="/media/${mode()}/videos/${encodeURIComponent(c.camera.video)}.mp4" muted playsinline preload="auto" data-video></video>`}
+      <span class="badge" data-cam-time></span>${live ? `<span class="badge r" title="This computer's camera">Source: Live camera</span>`
+        : `<span class="badge r" title="Source: ${esc(c.camera.video)}.mp4">Source: ${esc(c.camera.video)}</span>`}
       <div class="cover" data-cover hidden></div>
       ${fullscreen ? `<button class="video-fs" type="button" data-action="fullscreen" title="Full screen (Esc to exit)" aria-label="Show the video full screen">⛶</button>` : ""}
     </div>`;
@@ -1315,13 +1365,18 @@ function tick(forceCharts) {
     const card = document.getElementById(`lizard-${l.id}`);
     if (!card) continue;
     const created = Date.parse(l.config.createdAt), offsetS = (now - created) / 1000;
-    const cover = card.querySelector("[data-cover]"), v = card.querySelector("[data-video]");
+    const cover = card.querySelector("[data-cover]"), v = card.querySelector("[data-video]"), liveImg = card.querySelector("[data-live]");
+    try {   // one card's error must not stop the others
+    if (liveImg) {
+      card.querySelector("[data-cam-time]").textContent = `${liveImg.dataset.real === "1" && liveImg.dataset.ok === "1" ? "LIVE" : "RECORDED"} · ${fmtTime(now)}`;
+    } else {
     card.querySelector("[data-cam-time]").textContent = `${speed === 1 ? "LIVE" : speed === 0 ? "PAUSED" : speed + "×"} · ${fmtTime(now)}`;
     if (offsetS < 0) {
       cover.hidden = false; cover.textContent = `Camera starts ${fmtShort(created)}`; v.pause();
     } else {
       cover.hidden = true;
       syncVideo(v, offsetS, speed);
+    }
     }
     channels(l.config).forEach((ch, i) => {
       const el = card.querySelector(`[data-sensor="${i}"]`);
@@ -1331,6 +1386,7 @@ function tick(forceCharts) {
     });
     if (drawCharts) { renderSensorCharts(card, l, now); checkSensorRanges(l, now); envSummary(card, l, offsetS); }
     followClockRange(card, now);
+    } catch (err) { console.error(`Card ${l.id}:`, err); }
   }
 }
 // The dev panel's time range: a preset ("last N minutes", ending now on the dashboard clock) that keeps
@@ -1349,6 +1405,71 @@ $("#lizards").addEventListener("input", e => {
 $("#lizards").addEventListener("change", e => {
   if (e.target.matches("[data-range-preset]")) followClockRange(e.target.closest(".lizard"), simNow());
 });
+// The live camera: an <img> that loads one picture at a time. At real time it shows the newest frame, about
+// 5 a second; when the dev clock is paused or off real time, the stored frame for the clock (10 s slots).
+// Every request carries a new &n= so the browser never reuses an earlier picture.
+// At real time the <img> shows /media/camera/stream: the Pi pushes every frame (MJPEG), so the picture runs at
+// the camera's frame rate. The camera's status, polled every 2 s, says whether frames are arriving; when they
+// stop, the stream is closed and the cover says so, and it starts again when they come back.
+let liveRequests = 0, liveFps = 5, liveStatus = null;
+let liveStatusBusy = false;
+function refreshLiveStatus() {
+  if (liveStatusBusy) return;   // one check at a time
+  liveStatusBusy = true;
+  fetch("/api/camera").finally(() => { liveStatusBusy = false; }).then(r => r.ok ? r.json() : null).then(st => {
+    if (!st) return;
+    liveStatus = { ...st, receivedAt: Date.now() };
+    if (st.settings) liveFps = st.settings.frameRate;
+  }).catch(() => {});
+}
+refreshLiveStatus(); setInterval(refreshLiveStatus, 2000);
+// A stream is closed only when a recent status says the camera has stopped (no frame for 8 s, which also rides
+// out the few seconds a settings change restarts it). A slow or missed status check changes nothing.
+function liveIsFresh() {
+  if (!liveStatus || Date.now() - liveStatus.receivedAt > 10000) return true;
+  if (liveStatus.device === "off") return false;
+  return !!liveStatus.lastFrameAt && Date.parse(liveStatus.serverTime) - Date.parse(liveStatus.lastFrameAt) < 8000;
+}
+function startStream(img, cover) {
+  img.dataset.mode = "stream"; img.dataset.real = "1";
+  img.onload = () => { img.dataset.ok = "1"; if (cover) cover.hidden = true; };
+  img.onerror = () => { stopStream(img); img.dataset.next = Date.now() + 2000; };
+  img.src = `/media/camera/stream?n=${++liveRequests}`;
+}
+function stopStream(img) {
+  img.onload = img.onerror = null; img.removeAttribute("src"); img.dataset.mode = ""; img.dataset.ok = "0";
+}
+function syncLive(img, cover, now, speed) {
+  if (img.dataset.busy === "1" || +(img.dataset.next || 0) > Date.now()) return;
+  const real = speed === 1 && now > Date.now() - 15000;   // running, and not set back into the past
+  if (real) {
+    if (!liveIsFresh()) {
+      if (img.dataset.mode === "stream") stopStream(img);
+      cover.hidden = false; cover.textContent = liveStatus?.error || "No picture from the live camera right now";
+      return;
+    }
+    if (img.dataset.mode !== "stream") startStream(img, cover);
+    return;
+  }
+  if (img.dataset.mode === "stream") stopStream(img);
+  const slot = real ? "now" : new Date(Math.floor(now / 10000) * 10000).toISOString().replace(/\.\d+Z$/, "Z");
+  if (!real && img.dataset.slot === slot) return;          // paused or replaying: only when the slot changes
+  img.dataset.busy = "1"; img.dataset.slot = slot;
+  // One download per picture: fetch it, then show it from memory (no-store pictures would download twice).
+  fetch(`/media/camera/picture?${real ? "" : `t=${encodeURIComponent(slot)}&`}n=${++liveRequests}`).then(async r => {
+    if (!r.ok) throw new Error(r.status);
+    const url = URL.createObjectURL(await r.blob()), old = img.src;
+    img.src = url; if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+    img.dataset.ok = "1"; img.dataset.real = real ? "1" : "0";
+    img.dataset.busy = "0"; img.dataset.next = Date.now() + Math.max(30, 1000 / liveFps - 20); cover.hidden = true;
+  }).catch(() => {
+    img.dataset.ok = "0"; img.dataset.busy = "0"; img.dataset.next = Date.now() + 1000;
+    if (!real) img.dataset.slot = "";                         // try that slot again
+    cover.hidden = false;
+    cover.textContent = real ? "No picture from the live camera right now"
+      : `No camera picture for ${fmtTime(now)}. The dev clock is not at real time: set it to now to see the live picture.`;
+  });
+}
 // Keep the "camera" video at the moment that matches the clock; it loops like a live feed.
 function syncVideo(v, offsetS, speed) {
   const dur = v.duration;
@@ -1365,6 +1486,17 @@ function syncVideo(v, offsetS, speed) {
   }
 }
 setInterval(() => tick(false), 250);
+// Live cards ask for pictures on their own, faster loop, so the frame rate is not held to tick's 4 a second.
+setInterval(() => {
+  const now = simNow(), speed = clockSpeed();
+  document.querySelectorAll("img[data-live]").forEach(img => {
+    if (!img.offsetParent && !document.fullscreenElement?.contains(img)) {         // the card's hidden view
+      if (img.dataset.mode === "stream") stopStream(img);
+      return;
+    }
+    try { syncLive(img, img.parentElement.querySelector("[data-cover]"), now, speed); } catch (err) { console.error(err); }
+  });
+}, 30);
 
 /* ================= Dev mode ================= */
 function renderDevBar() {
@@ -1402,7 +1534,7 @@ async function showBundle(card, lizardId, m) {
         <div class="chunk-head"><strong>IMAGES chunk · ${c.frames.length} image${c.frames.length === 1 ? "" : "s"}</strong>
           <a class="btn" href="${base + c.pdf}" target="_blank" rel="noopener">Open ${esc(c.pdf)}</a></div>
         <pre>${esc(chunkTexts[i])}</pre>
-        <div class="thumbs">${c.frames.map(f => `<figure><img loading="lazy" src="${base + f.file}" alt="Frame at ${esc(f.label)}"><figcaption>${esc(f.label.slice(11, 16))} · v${f.videoSeconds}s</figcaption></figure>`).join("")}</div>
+        <div class="thumbs">${c.frames.map(f => `<figure><img loading="lazy" src="${base + f.file}" alt="Frame at ${esc(f.label)}"><figcaption>${esc(f.label.slice(11, 16))} · ${f.capturedAt ? `live ${esc(f.capturedAt.slice(11, 19))}` : `v${f.videoSeconds}s`}</figcaption></figure>`).join("")}</div>
       </div>`).join("")}
     <div class="form-actions" style="justify-content:flex-start">
       <button class="btn dev" type="button" data-action="send" data-bundle="${esc(m.bundleId)}">${esc(sendLabel())}</button>
@@ -1545,9 +1677,13 @@ function fillMediaSelects() {
     if (pref) sel.value = pref;
     guessUnit(sel);
   });
-  const missing = !media.videos.length || !media.sensors.length;
+  const live = $("#f-source-live");
+  live.disabled = !media.liveCamera;
+  $("#f-source-hint").textContent = media.liveCamera ? "A recorded video, or this computer's live camera."
+    : "A recorded video. Camera: this computer has no live camera turned on (start the app with --camera).";
+  const noVideos = !media.videos.length && !media.liveCamera, missing = noVideos || !media.sensors.length;
   $("#media-hint").innerHTML = missing
-    ? `<span style="color:var(--bad)">${mode() === "main" ? "Main" : "Toy"} mode has no ${!media.videos.length ? "videos" : "sensor files"} yet. ${settings.devMode ? "Upload them in Settings." : "Turn on dev mode in Settings to upload them."}</span>`
+    ? `<span style="color:var(--bad)">${mode() === "main" ? "Main" : "Toy"} mode has no ${noVideos ? "videos" : "sensor files"} yet. ${settings.devMode ? "Upload them in Settings." : "Turn on dev mode in Settings to upload them."}</span>`
     : `Videos and sensor files come from ${mode()} mode's media${settings.devMode ? "; upload more in Settings" : ""}.`;
 }
 addForm.elements.species.addEventListener("input", () => { speciesHint(); renderSuggestions(addForm.elements.species, $("#f-species-suggest")); });
@@ -1557,7 +1693,7 @@ let editingId = null;
 function closeAdd() {
   skipResearch = false;
   $("#f-species-suggest").innerHTML = "";
-  addForm.reset(); addErr.hidden = true; addForm.hidden = true; addBtn.hidden = false; $("#f-coldside").textContent = "Right";
+  addForm.reset(); showSource(); addErr.hidden = true; addForm.hidden = true; addBtn.hidden = false; $("#f-coldside").textContent = "Right";
   editingId = null; $("#form-title").textContent = "Add an animal"; $("#form-submit").textContent = "Create animal";
 }
 function openEdit(l) {
@@ -1567,7 +1703,9 @@ function openEdit(l) {
   $("#form-title").textContent = `Edit ${c.name}`; $("#form-submit").textContent = "Save changes";
   f.name.value = c.name; f.species.value = c.species; f.sex.value = c.sex || "unknown"; f.width.value = c.enclosureWidthCm ?? ""; speciesHint();
   renderSuggestions(f.species, $("#f-species-suggest"));
-  f.view.value = c.camera.view; f.video.value = c.camera.video;
+  f.view.value = c.camera.view;
+  if (c.camera.source === "live") f.source.value = "live"; else { f.source.value = "video"; f.video.value = c.camera.video; }
+  showSource();
   f.hotSide.value = c.sensors.hotSide; $("#f-coldside").textContent = c.sensors.hotSide === "left" ? "Right" : "Left";
   for (const [key, side] of [["hot", "hot"], ["cold", "cold"]]) {
     f[`${side}Temp`].value = c.sensors[key].temperature.series; f[`${side}TempUnit`].value = c.sensors[key].temperature.unit;
@@ -1576,9 +1714,72 @@ function openEdit(l) {
   addBtn.hidden = true; addForm.hidden = false;
   addForm.scrollIntoView({ behavior: "smooth", block: "start" }); f.name.focus({ preventScroll: true });
 }
-addBtn.addEventListener("click", () => { fillMediaSelects(); addBtn.hidden = true; addForm.hidden = false; addForm.elements.name.focus(); });
+addBtn.addEventListener("click", () => {
+  fillMediaSelects();
+  addForm.elements.source.value = !media.videos.length && media.liveCamera ? "live" : "video"; showSource();
+  addBtn.hidden = true; addForm.hidden = false; addForm.elements.name.focus();
+});
 $("#add-cancel").addEventListener("click", closeAdd);
 $("#f-hotside").addEventListener("change", e => $("#f-coldside").textContent = e.target.value === "left" ? "Right" : "Left");
+// The form's camera source: Video (a file) or Camera (this computer's live camera). The camera's picture
+// settings show only when Camera is picked, with a preview; they are saved for the camera, not the animal.
+function showSource() {
+  const f = addForm.elements, live = f.source.value === "live";
+  addForm.querySelectorAll("[data-source]").forEach(el => el.hidden = el.dataset.source !== (live ? "live" : "video"));
+  if (live) loadCameraSettings();
+}
+let cameraDirty = false;   // the form's camera settings differ from what was loaded from the camera
+async function loadCameraSettings() {
+  cameraDirty = false;
+  const f = addForm.elements;
+  try {
+    const st = await readResponse(await fetch("/api/camera")), s = st.settings;
+    f.camAwb.innerHTML = st.awbModes.map(m => `<option value="${m}">${m[0].toUpperCase() + m.slice(1)}</option>`).join("");
+    liveFps = s.frameRate; f.camFps.value = s.frameRate; f.camFocus.value = s.focus; f.camLens.value = s.lensPosition; f.camExposure.value = s.exposure; f.camEv.value = s.ev;
+    f.camShutter.value = s.shutterMs; f.camGain.value = s.gain; f.camAwb.value = s.awb;
+    f.camBrightness.value = s.brightness; f.camContrast.value = s.contrast;
+    showCameraControls();
+    $("#cam-msg").textContent = st.error || "";
+  } catch (x) { $("#cam-msg").textContent = x.message; }
+}
+function showCameraControls() {
+  const f = addForm.elements;
+  f.camLens.disabled = f.camFocus.value === "auto";
+  addForm.querySelectorAll("[data-exposure]").forEach(el => el.hidden = el.dataset.exposure !== f.camExposure.value);
+  addForm.querySelectorAll("[data-out]").forEach(el => el.textContent = (+f[el.dataset.out].value).toFixed(2));
+}
+async function applyCameraSettings() {
+  const f = addForm.elements;
+  await readResponse(await fetch("/api/camera/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+    frameRate: f.camFps.value, focus: f.camFocus.value, lensPosition: f.camLens.value, exposure: f.camExposure.value, ev: f.camEv.value,
+    shutterMs: f.camShutter.value, gain: f.camGain.value, awb: f.camAwb.value, brightness: f.camBrightness.value, contrast: f.camContrast.value,
+  }) }));
+}
+addForm.addEventListener("change", e => {
+  if (e.target.name === "source") showSource();
+  if (e.target.name?.startsWith("cam")) { cameraDirty = true; showCameraControls(); }
+});
+addForm.addEventListener("input", e => { if (e.target.name?.startsWith("cam")) cameraDirty = true; if (e.target.type === "range") showCameraControls(); });
+$("#cam-apply").addEventListener("click", async () => {
+  const btn = $("#cam-apply"); btn.disabled = true; $("#cam-msg").textContent = "Applying…";
+  try { await applyCameraSettings(); cameraDirty = false; liveFps = +addForm.elements.camFps.value; $("#cam-msg").textContent = "Applied. The camera restarts: the picture changes in a few seconds."; }
+  catch (x) { $("#cam-msg").textContent = x.message; }
+  btn.disabled = false;
+});
+// The preview: the newest picture, about 3 a second, while the form shows the camera settings.
+// The preview in the form: the same live stream, while the form shows the camera settings.
+setInterval(() => {
+  const box = $("#cam-preview"), shown = !addForm.hidden && addForm.elements.source.value === "live";
+  let img = box.querySelector("img");
+  if (!shown || !liveIsFresh()) {
+    if (img) stopStream(img);
+    const text = shown ? (liveStatus?.error || "No picture from the camera right now") : "Waiting for the camera…";
+    if (box.textContent !== text) box.innerHTML = `<span>${esc(text)}</span>`;
+    return;
+  }
+  if (!img) { box.innerHTML = `<img alt="Camera preview">`; img = box.querySelector("img"); }
+  if (img.dataset.mode !== "stream") startStream(img, null);
+}, 500);
 // Adding (or editing to) a species with no profile researches it first, so the animal's card starts from its
 // profile. If research fails, nothing is added; "Add without a profile" goes ahead anyway.
 let skipResearch = false;
@@ -1586,6 +1787,10 @@ addForm.addEventListener("submit", async e => {
   e.preventDefault();
   const f = addForm.elements, submit = $("#form-submit"), label = submit.textContent;
   addErr.hidden = true;
+  if (f.source.value === "live" && cameraDirty) {   // only settings changed in this form; never overwrite with stale ones
+    try { await applyCameraSettings(); }
+    catch (x) { addErr.textContent = `Camera settings: ${x.message}`; addErr.hidden = false; return; }
+  }
   if (!f.name.value.trim() || !f.species.value.trim()) { addErr.textContent = "Fill in the name and the species."; addErr.hidden = false; return; }
   if (!skipResearch && !findProfile(f.species.value)) {
     submit.disabled = true; submit.textContent = "Creating the species profile…";
@@ -1606,7 +1811,7 @@ addForm.addEventListener("submit", async e => {
     name: f.name.value.trim(), species: f.species.value.trim(), sex: f.sex.value,
     enclosureWidthCm: f.width.value.trim() === "" ? null : +f.width.value,
     createdAt: new Date(simNow()).toISOString(),   // ignored when editing: the lizard keeps its start time
-    camera: { view: f.view.value, video: f.video.value },
+    camera: f.source.value === "live" ? { view: f.view.value, source: "live" } : { view: f.view.value, video: f.video.value },
     sensors: {
       hotSide: f.hotSide.value,
       hot: { temperature: { series: f.hotTemp.value, unit: f.hotTempUnit.value }, humidity: { series: f.hotHum.value, unit: f.hotHumUnit.value } },

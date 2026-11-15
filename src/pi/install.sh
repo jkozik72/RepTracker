@@ -18,7 +18,7 @@
 #   /usr/local/sbin/reptracker-admin   update, restart, uninstall (also used by the Settings tab)
 set -euo pipefail
 
-INSTALLER_VERSION=1
+INSTALLER_VERSION=2
 REPO="https://github.com/jkozik72/RepTracker.git"
 BRANCH=""
 PORT=443
@@ -141,8 +141,19 @@ run "Installing packages (the first time: a few minutes)" "${APT[@]}" install -y
 PY_OK=$(python3 -c 'import sys; print(int(sys.version_info >= (3, 11)))')
 [ "$PY_OK" = 1 ] || die "RepTracker needs Python 3.11 or newer; this system has $(python3 --version). Use Raspberry Pi OS Bookworm or newer."
 
+# The Pi camera (rpicam-vid). A soft step: plain Debian without the package still installs, camera off.
+if ! command -v rpicam-vid >/dev/null 2>&1; then
+  # Raspberry Pi OS calls it rpicam-apps-lite (or rpicam-apps); Ubuntu calls it rpicam-apps
+  for pkg in rpicam-apps-lite rpicam-apps; do
+    "${APT[@]}" install -y "$pkg" >>"$LOG" 2>&1 && break
+  done
+fi
+if command -v rpicam-vid >/dev/null 2>&1; then CAMERA_FOUND=1; done_line "Pi camera software (rpicam-vid)"
+else CAMERA_FOUND=0; say "No rpicam-vid: the live camera stays off"; fi
+
 step "The reptracker system user"
 id -u "$NAME" >/dev/null 2>&1 || useradd --system --home-dir "$HOME_DIR" --shell /usr/sbin/nologin "$NAME"
+getent group video >/dev/null && usermod -aG video "$NAME"   # the camera devices belong to group video
 install -d -o "$NAME" -g "$NAME" -m 750 "$HOME_DIR"
 as_app() { runuser -u "$NAME" -- "$@"; }
 done_line "User $NAME, home $HOME_DIR"
@@ -172,7 +183,12 @@ if [ -f "$ENV_FILE" ]; then
   ORIGINAL_HOSTNAME=$(sed -n 's/^REPTRACKER_ORIGINAL_HOSTNAME=//p' "$ENV_FILE" | head -1)
   OLD_PORT=$(sed -n 's/^REPTRACKER_PORT=//p' "$ENV_FILE" | head -1)
   if [ -n "$OLD_PORT" ] && [ "$PORT_SET" = 0 ]; then PORT=$OLD_PORT; fi
+  OLD_CAMERA=$(sed -n 's/^REPTRACKER_CAMERA=//p' "$ENV_FILE" | head -1)
+  OLD_CAMERA_ARGS=$(sed -n 's/^REPTRACKER_CAMERA_ARGS=//p' "$ENV_FILE" | head -1)   # kept with its quotes
 fi
+CAMERA=off; [ "$CAMERA_FOUND" = 1 ] && CAMERA=pi
+[ -n "${OLD_CAMERA:-}" ] && CAMERA=$OLD_CAMERA
+CAMERA_ARGS=${OLD_CAMERA_ARGS:-'"--autofocus-mode manual --lens-position 2.0"'}
 REDIRECT=80; [ "$PORT" = 80 ] && REDIRECT=0
 cat > "$ENV_FILE" <<EOF
 # RepTracker settings, read by reptracker.service.
@@ -185,6 +201,10 @@ REPTRACKER_HOME=$HOME_DIR
 REPTRACKER_INSTALLER_VERSION=$INSTALLER_VERSION
 REPTRACKER_ORIGINAL_HOSTNAME=${ORIGINAL_HOSTNAME:-raspberrypi}
 IMAGEIO_FFMPEG_EXE=/usr/bin/ffmpeg
+# Live camera: pi (the Raspberry Pi camera), test (replays a sample video) or off
+REPTRACKER_CAMERA=$CAMERA
+# Extra rpicam-vid options for focus, exposure and white balance (see src/pi/README.md)
+REPTRACKER_CAMERA_ARGS=$CAMERA_ARGS
 EOF
 chmod 644 "$ENV_FILE"
 
@@ -199,6 +219,10 @@ touch "$HOME_DIR/task.log"; chown root:"$NAME" "$HOME_DIR/task.log"; chmod 644 "
 done_line "reptracker-admin and its sudo rule"
 
 step "The computer's name"
+# Ubuntu's cloud-init sets the hostname back at every boot unless told to keep it.
+if [ "$KEEP_HOSTNAME" = 0 ] && [ -d /etc/cloud/cloud.cfg.d ]; then
+  echo "preserve_hostname: true" > /etc/cloud/cloud.cfg.d/99-reptracker-hostname.cfg
+fi
 if [ "$KEEP_HOSTNAME" = 0 ] && [ "$(hostname)" != "$NAME" ]; then
   OLD=$(hostname)
   if command -v hostnamectl >/dev/null && [ "$HAS_SYSTEMD" = 1 ]; then hostnamectl set-hostname "$NAME"; else echo "$NAME" > /etc/hostname; hostname "$NAME" 2>/dev/null || true; fi

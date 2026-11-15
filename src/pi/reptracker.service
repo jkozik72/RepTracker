@@ -7,6 +7,8 @@ Wants=network-online.target
 [Service]
 User=reptracker
 Group=reptracker
+# The camera devices (/dev/video*, /dev/media*, /dev/dma_heap) belong to group video
+SupplementaryGroups=video
 EnvironmentFile=/etc/reptracker.env
 # Print lines reach the journal at once
 Environment=PYTHONUNBUFFERED=1
