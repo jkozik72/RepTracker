@@ -115,6 +115,35 @@ class FeedingAndMovementTest(unittest.TestCase):
         self.assertEqual([(p["t"][11:16], p["p"], p["w"]) for p in data["points"]], [("01:00", 10, 120), ("01:02", 50, 60), ("01:03", 60, 60)])
 
 
+class UploadTest(unittest.TestCase):
+    """Uploads stream straight from the request body to disk, through a .part file."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        patcher = mock.patch.object(main, "DATA", Path(self.tmp.name))
+        patcher.start(); self.addCleanup(patcher.stop)
+
+    def test_sensor_file_streams_to_disk(self):
+        import io
+        body = json.dumps({"t": 60000, "value": [1, 2, 3]}).encode()
+        self.assertEqual(main.SaveUpload("toy", "sensors", "my-temp.json", io.BytesIO(body), len(body)), {"kind": "sensors", "name": "my-temp"})
+        folder = main.SensorsDir("toy")
+        self.assertEqual((folder / "my-temp.json").read_bytes(), body)
+        self.assertEqual(list(folder.glob("*.part")), [])
+
+    def test_cut_off_and_bad_uploads_leave_nothing(self):
+        import io
+        body = json.dumps({"t": 60000, "value": [1, 2, 3]}).encode()
+        with self.assertRaisesRegex(main.RepTrackerError, "cut off"):
+            main.SaveUpload("toy", "sensors", "a.json", io.BytesIO(body[:5]), len(body))
+        with self.assertRaisesRegex(main.RepTrackerError, "Not valid JSON"):
+            main.SaveUpload("toy", "sensors", "b.json", io.BytesIO(b"{nope"), 5)
+        with self.assertRaisesRegex(main.RepTrackerError, "Couldn't read that video"):
+            main.SaveUpload("toy", "videos", "c.mp4", io.BytesIO(b"not a video"), 11)
+        self.assertEqual([p.name for p in main.DATA.rglob("*") if p.is_file()], [])
+
+
 class SensorDataTest(unittest.TestCase):
     def test_patterns_stay_in_go_under_go_over_or_vary(self):
         def outside(pattern):

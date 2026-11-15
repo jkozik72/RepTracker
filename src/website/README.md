@@ -21,6 +21,8 @@ On the local network, over HTTPS:
 
 It prints the addresses to open (for example `https://192.168.1.20:5000`). Browsers warn once about the self-signed certificate (made once in `data/tls/`). Debug mode is off in this mode. There is no password reset: delete `data/auth.json` to remove the account (everyone is signed out) and create a new one on the next visit.
 
+On a Raspberry Pi, one command installs it as a service at `https://reptracker.local`: see [src/pi/README.md](../pi/README.md). Settings then has update, restart and uninstall.
+
 ## Modes
 
 | | Dev mode off | Dev mode on (Settings) |

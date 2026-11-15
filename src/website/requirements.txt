@@ -4,3 +4,4 @@ imageio-ffmpeg>=0.6
 google-genai>=3.3
 anthropic>=2.8
 cryptography>=43
+cheroot>=10

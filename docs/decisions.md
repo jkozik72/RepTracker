@@ -71,3 +71,11 @@ Entry format:
 - **Sources:** `docs/notes/2026-11-15-care-tracking-chat.md`
 - **Replaces:** none
 
+## D8 (2026-11-15): Host on a Raspberry Pi, installed with one command and managed from Settings
+- **Context:** RepTracker should run all the time on a Pi on the local network, be installed with one command, and be updated, restarted or removed without a terminal.
+- **Options:** A: a manual setup written in the README. B: a Docker image. C: an install script that sets up a systemd service, plus a root-owned admin command the app calls through one sudo rule.
+- **Chose:** C. `curl -fsSL .../src/pi/install.sh | sudo bash` installs packages, clones the repo to `/opt/reptracker/app` as a `reptracker` system user, makes a venv, writes `/etc/reptracker.env`, renames the Pi to `reptracker` (so the address is `https://reptracker.local`) and starts `reptracker.service` on port 443, with port 80 redirecting to it. Running it again updates. The Settings tab runs `/usr/local/sbin/reptracker-admin` (update to a branch, restart, uninstall) through `sudo`; git and pip run as the `reptracker` user, so no repository code runs as root. Uninstall asks for the password again and keeps a copy of the data unless told to delete it. The LAN server is cheroot instead of Flask's development server. Docker was not chosen because it adds a layer the team would have to learn to change a Pi setup.
+- **Consequences:** Only Debian-based systems with systemd (Raspberry Pi OS Bookworm or newer, Python 3.11+). Updating resets tracked files, such as the Toy sample animals; untracked and git-ignored data stays. Changes to the installer itself (the service, the admin command) need the install command run again; the update says so. The signed-in user can update, restart or uninstall, so the account password protects the Pi as well.
+- **Sources:** `docs/notes/2026-11-15-pi-hosting-chat.md`, D7
+- **Replaces:** none
+

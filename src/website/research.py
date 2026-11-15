@@ -147,12 +147,53 @@ def _Normalize(value, schema, root, path, notes):
     return "" if value is None else str(value).strip()
 
 
+def RequestSchema(schema=None):
+    """The profile schema in the form sent to the AI. Structured outputs compile the schema into a grammar with a
+    size limit, and per-sex condition lists pushed it over. So the request asks for sexNotes as three texts and a
+    "sex" on each condition; FromRequestShape turns the reply back into profile-schema.json's shape."""
+    s = json.loads(json.dumps(schema or Schema()))
+    s["properties"]["sexNotes"] = {
+        "type": "object", "additionalProperties": False, "required": ["howToTell", "male", "female"],
+        "description": "differences between the sexes",
+        "properties": {"howToTell": {"type": "string", "description": "how a keeper can tell males from females, and from what age"},
+                       "male": {"type": "string", "description": "care and behaviour specific to males"},
+                       "female": {"type": "string", "description": "care and behaviour specific to females"}}}
+    condition = s["$defs"]["condition"]
+    condition["properties"]["sex"] = {"enum": ["both", "male", "female"],
+                                      "description": "who gets it: both sexes, or only males or only females"}
+    condition["required"].append("sex")
+    return s
+
+
+def FromRequestShape(raw):
+    """A reply in RequestSchema's shape, in profile-schema.json's: sex-specific conditions move under sexNotes."""
+    if not isinstance(raw, dict):
+        return raw
+    notes = raw.get("sexNotes")
+    if not isinstance(notes, dict) or isinstance(notes.get("male"), dict):
+        return raw   # already in the stored shape (an older reply, or a keeper's edit)
+    out = dict(raw)
+    general, bySex = [], {"male": [], "female": []}
+    for c in raw.get("conditions") or []:
+        if not isinstance(c, dict):
+            continue
+        sex = c.get("sex")
+        c = {k: v for k, v in c.items() if k != "sex"}
+        (bySex[sex] if sex in bySex else general).append(c)
+    out["conditions"] = general
+    out["sexNotes"] = {"howToTell": notes.get("howToTell", ""),
+                       "male": {"notes": notes.get("male", ""), "conditions": bySex["male"]},
+                       "female": {"notes": notes.get("female", ""), "conditions": bySex["female"]}}
+    return out
+
+
 def NormalizeProfile(raw, schema=None):
     """Force an AI reply (or a keeper's edit) into prompts/profile-schema.json; returns (profile, notes)."""
     schema = schema or Schema()
     if not isinstance(raw, dict) or not str(raw.get("commonName") or "").strip():
         raise ResearchError("The profile has no common name, so it was not saved. Try again.")
     notes = []
+    raw = FromRequestShape(raw)
     profile = _Normalize(raw, schema, schema, "", notes)
     profile["trackedStats"] = CleanTrackedStats(profile.get("trackedStats", []), notes)
     return profile, notes

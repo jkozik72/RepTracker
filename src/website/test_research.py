@@ -64,6 +64,30 @@ class NormalizeTest(unittest.TestCase):
                 research.NormalizeProfile(bad)
 
 
+class RequestShapeTest(unittest.TestCase):
+    """The AI gets a simpler schema (a large one fails to compile for structured outputs); replies come back
+    in the stored shape."""
+
+    def test_request_schema_is_flat_for_sex(self):
+        s = research.RequestSchema()
+        self.assertEqual(s["properties"]["sexNotes"]["properties"]["male"], {"type": "string", "description": "care and behaviour specific to males"})
+        self.assertIn("sex", s["$defs"]["condition"]["required"])
+        self.assertNotIn("sex", research.Schema()["$defs"]["condition"]["properties"])   # the stored shape is unchanged
+
+    def test_reply_moves_sex_conditions_under_sex_notes(self):
+        def cond(name, sex):
+            return {"name": name, "visibleSigns": ["x"], "urgency": "vet soon", "notes": "", "sex": sex}
+        raw = {"commonName": "Leopard gecko", "sexNotes": {"howToTell": "Pores.", "male": "Territorial.", "female": "Lays eggs."},
+               "conditions": [cond("MBD", "both"), cond("Egg binding", "female"), cond("Hemipenal prolapse", "male")]}
+        out = research.FromRequestShape(raw)
+        self.assertEqual([c["name"] for c in out["conditions"]], ["MBD"])
+        self.assertNotIn("sex", out["conditions"][0])
+        self.assertEqual(out["sexNotes"]["female"], {"notes": "Lays eggs.", "conditions": [
+            {"name": "Egg binding", "visibleSigns": ["x"], "urgency": "vet soon", "notes": ""}]})
+        self.assertEqual(out["sexNotes"]["male"]["conditions"][0]["name"], "Hemipenal prolapse")
+        self.assertIs(research.FromRequestShape(out), out)   # the stored shape passes through
+
+
 class StoreTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
