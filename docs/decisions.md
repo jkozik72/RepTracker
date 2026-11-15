@@ -87,3 +87,11 @@ Entry format:
 - **Sources:** `docs/notes/2026-11-15-phone-app-chat.md`, D7, D8
 - **Replaces:** none (refines D7's certificate)
 
+## D10 (2026-11-15): The server analyses on a schedule and pushes new alerts to phones
+- **Context:** Alerts should reach a phone when no page is open. Until now analyses only ran while a dashboard page was open (the page's polling), and alerts were worked out in the browser.
+- **Options:** A: Web Push from the server (the browsers' push services; needs a trusted certificate, D9). B: a third-party notification app (ntfy, Pushover). C: email.
+- **Chose:** A. A background loop in the server (`scheduler.py`) analyses every Main-mode animal at each interval mark set in Settings (off, 15 min to 6 h) and checks alerts every minute (`alerts.py`, the same rules as the dashboard). An alert that wasn't there at the previous check is pushed once to every device that turned alerts on (`push.py`, pywebpush, VAPID keys made once); the notification reads the alerts and opens the animal. Only alerts are sent, not notifications. The push contact is the project's page, not an email address (`REPTRACKER_PUSH_CONTACT` overrides it).
+- **Consequences:** A real AI provider bills every scheduled call, with or without a page open. The server needs internet to reach the push services; they can't read the messages (encrypted). Alert rules exist twice (browser and server) and must be kept in step. The page's own polling stays for the dev clock, in dev mode only. iPhones get alerts only from the home-screen app (iOS 16.4+).
+- **Sources:** `docs/notes/2026-11-15-phone-alerts-chat.md`, D9
+- **Replaces:** none
+

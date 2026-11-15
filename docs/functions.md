@@ -189,6 +189,21 @@ This installation (D8). Update, restart and uninstall only where `src/pi/install
 | `reptracker-admin` | `update [branch]`, `restart`, `uninstall [--delete-data]`, `status`, `log`; long tasks run as a `systemd-run` unit and log to `/opt/reptracker/task.log` |
 | `reptracker.service` | The systemd unit: runs `app.py --lan` as `reptracker`, restarts on exit |
 
+### `src/website/alerts.py`, `scheduler.py`, `push.py`
+
+Phone alerts (D10). Files: `data/schedule.json`, `data/push/` (keys, devices, alerts already sent); git-ignored.
+
+| Function | Does | In → out |
+|---|---|---|
+| `alerts.Alerts` | An animal's alerts with stable keys, by the dashboard's rules (`getAlerts`): sensors out of range, concerning checks, conditions, body condition, weight, hazards, overdue feeding | mode, ListLizards entry, now → `[{key, text}]` |
+| `alerts.SensorAlerts` / `FeedingState` | The sensor part; fed / due / overdue | |
+| `scheduler.Settings` / `SaveSettings` / `Status` | The schedule (off, 15 min to 6 h; images per analysis), and what Settings shows | |
+| `scheduler.AnalyzeAll` | Analyses every Main-mode animal for the interval that just ended; one failure doesn't stop the others | mark, minutes, images → results |
+| `scheduler.CheckAlerts` | Pushes each animal's new alerts (keys not seen at the previous check) | now → what was sent |
+| `scheduler.Start` | The background loop: analyses at interval marks, alerts every minute; started by `app.py` when it serves | |
+| `push.Keys` / `Subscribe` / `Unsubscribe` / `Devices` | Push keys (made once) and the devices with alerts on | |
+| `push.Send` | One encrypted, signed notification to every device; drops devices the push service says are gone | title, body, url, tag → count |
+
 ### `src/website/claude_ai.py`
 
 The Claude provider (D4): the Claude API through the `anthropic` package, imported only when Claude is used. Source: `docs/notes/2026-11-15-claude-provider-chat.md`. Reuses `ParseJson`, `NormalizeResult` and `FrameLabels` from `ai.py`. One analysis is one request (`max_retries=0`); refusals go to Anthropic's server-side fallback (`fallbacks: "default"`). Every failure leaves this file as `AiError` with one sentence for the dashboard.
@@ -234,6 +249,7 @@ The Claude provider (D4): the Claude API through the `anthropic` package, import
 | `noteText` | A notification's text with species check labels from the profile | |
 | `shrinkPhoto` / `clearAskPhoto` | Ask: the camera / attach button's photo, shrunk on the device to 1568 px JPEG before it is sent; removing it | |
 | `renderTrust` | Settings: whether this browser trusts RepTracker (its service worker registered), is running as the installed app, or needs the certificate; the Install button appears when the browser offers it | |
+| `loadSchedule` / `renderSchedule` / `saveSchedule` | Settings, Automatic analysis and phone alerts: the server's schedule, turning alerts on or off for this device, the devices list, a test alert | |
 | `loadPhone` / `showPhoneQr` | Settings, Open on your phone: the server's addresses and a QR code for the one picked | |
 | `narrowScreen` | Phones (600px wide or less): charts are drawn 360 wide with fewer labels, so their text stays readable; crossing it redraws | |
 | `loadSystem` / `renderSystem` / `startSystem` | Settings, This installation: branch and commit; update, restart, uninstall, following the task log through the restart | |

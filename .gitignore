@@ -50,3 +50,5 @@ src/website/research/*/images/
 src/website/data/auth.json
 src/website/data/secret_key
 src/website/data/tls/
+src/website/data/push/
+src/website/data/schedule.json

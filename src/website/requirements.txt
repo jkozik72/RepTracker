@@ -6,3 +6,4 @@ anthropic>=2.8
 cryptography>=43
 cheroot>=10
 segno>=1.6
+pywebpush>=2.0
