@@ -1,0 +1,1 @@
+Fill out this JSON schema with the data gathered from this PDF of images taken 1 minute apart, and this file of ideal conditions for {species}. Answer with only the filled out schema and nothing else.
