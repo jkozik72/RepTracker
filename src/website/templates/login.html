@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#3f7d3a">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="RepTracker">
 <title>RepTracker · {{ "Create the account" if setup else "Sign in" }}</title>
 <style>
   :root { --bg: #f4f5f0; --surface: #fff; --border: #dcdfd4; --text: #1d221b; --muted: #61695c; --accent: #3f7d3a; --accent-ink: #fff; --bad: #b3261e; --warn-bg: #fbefd6; --warn: #9a6200; }
@@ -24,6 +29,12 @@
   .error { color: var(--bad); font-weight: 600; margin: 0; }
   .note { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 8px 10px; font-size: 13px; margin: 0; }
 </style>
+<script>
+// The service worker makes RepTracker installable (D9). Browsers only allow it on a connection they trust:
+// on a phone, after the RepTracker certificate is installed (Settings > Open on your phone).
+window.swReady = ("serviceWorker" in navigator && window.isSecureContext)
+  ? navigator.serviceWorker.register("/sw.js").then(() => true, () => false) : Promise.resolve(false);
+</script>
 </head>
 <body>
 <form class="card" method="post" action="/login" autocomplete="on">

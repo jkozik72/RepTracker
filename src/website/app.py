@@ -1,4 +1,5 @@
 import argparse
+import json
 from datetime import timedelta
 
 from flask import Flask, jsonify, redirect, render_template, request, send_from_directory, session
@@ -44,7 +45,9 @@ def unexpected(err):
 
 # ---------- sign-in: every page and API call needs it, except the login page itself ----------
 
-OPEN_ENDPOINTS = {"login", "login_post"}
+# Open without signing in: the sign-in page, what makes the app installable (manifest, service worker, icons,
+# the offline page) and the certificate a phone installs. None of them holds data.
+OPEN_ENDPOINTS = {"login", "login_post", "static", "manifest", "service_worker", "authority_certificate"}
 
 
 @app.before_request
@@ -134,7 +137,35 @@ def PhoneLinks():
     links = [{"url": f"https://{a}{suffix}", "label": a + (" (Tailscale)" if a.startswith("100.") else "")}
              for a in sorted(auth.LanAddresses(), key=lambda a: a.startswith("100."))]
     links += [{"url": f"https://{n}{suffix}", "label": f"{n} (not on every Android phone)"} for n in auth.HostNames() if n.endswith(".local")]
-    return {"lan": True, "links": links}
+    return {"lan": True, "links": links, "fingerprint": auth.AuthorityCertificate()[1]}
+
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    """What a phone needs to install RepTracker as an app (D9)."""
+    icons = [{"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+             {"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+             {"src": "/static/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}]
+    body = {"name": "RepTracker", "short_name": "RepTracker", "id": "/", "start_url": "/", "scope": "/",
+            "display": "standalone", "background_color": "#f4f5f0", "theme_color": "#3f7d3a",
+            "description": "Keep track of your reptiles and amphibians", "icons": icons}
+    return app.response_class(json.dumps(body), mimetype="application/manifest+json")
+
+
+@app.get("/sw.js")
+def service_worker():
+    """The service worker, served from the root so it covers the whole site."""
+    response = send_from_directory(app.static_folder, "sw.js", mimetype="text/javascript", max_age=0)
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
+@app.get("/reptracker-ca.crt")
+def authority_certificate():
+    """RepTracker's certificate authority (public part only), for a phone to install once (D9)."""
+    der, _ = auth.AuthorityCertificate()
+    return app.response_class(der, mimetype="application/x-x509-ca-cert",
+                              headers={"Content-Disposition": "attachment; filename=reptracker-ca.crt"})
 
 
 @app.get("/api/phone")

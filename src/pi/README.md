@@ -16,6 +16,10 @@ Then open **https://reptracker.local** on any device on the same network (or the
 
 For example: `curl -fsSL <url> | sudo bash -s -- --branch src/pi-install`
 
+## On a phone
+
+In **Settings → Open on your phone**: scan the QR code (use the IP address on Android), download the RepTracker certificate and install it once (the steps for Android and iPhone are there), then install RepTracker as an app. The certificate can only vouch for RepTracker's own addresses (D9).
+
 ## Manage it
 
 In **Settings → This installation**, or on the Pi:

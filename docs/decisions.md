@@ -79,3 +79,11 @@ Entry format:
 - **Sources:** `docs/notes/2026-11-15-pi-hosting-chat.md`, D7
 - **Replaces:** none
 
+## D9 (2026-11-15): Phones trust RepTracker through its own name-constrained certificate authority; the site installs as an app
+- **Context:** Phones only install a site as an app (and later allow notifications) when they trust its HTTPS certificate. The self-signed certificate of D7 is never trusted, and it trains people to tap past warnings.
+- **Options:** A: RepTracker's own certificate authority, installed once on each phone. B: Tailscale, which gives a publicly trusted certificate and works away from home, but needs an account and an app on every device. C: keep the self-signed certificate (no install, no notifications).
+- **Chose:** A, for a home-only setup without outside accounts. The authority is made once on the server (`data/tls/ca.pem`, key `ca-key.pem` readable only by the service user, git-ignored) and is **name-constrained** to `.local` names, `localhost` and private addresses, so even with its key nobody can make a certificate a phone accepts for another website; tests check this. It signs the server's certificate (397 days, renewed by itself when names, addresses or expiry change). Settings offers the public certificate (`/reptracker-ca.crt`) with its fingerprint and install steps for Android and iPhone, and an Install button. The site has a manifest, icons and a service worker that only keeps an offline page (no data cached).
+- **Consequences:** Each phone installs the certificate once (a few taps; Android may show "network may be monitored"). Phones that don't still see a warning once and can't install the app. Uninstalling RepTracker removes the authority (a data backup keeps it, root-only). The manifest, worker, icons, offline page and certificate open without signing in; they hold no data. Replaces D7's self-signed certificate.
+- **Sources:** `docs/notes/2026-11-15-phone-app-chat.md`, D7, D8
+- **Replaces:** none (refines D7's certificate)
+

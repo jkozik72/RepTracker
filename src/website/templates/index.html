@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#3f7d3a">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="RepTracker">
 <title>RepTracker</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cg transform='rotate(-18 16 16)'%3E%3Cg fill='none' stroke='%233f7d3a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M13.6 11.2 9.4 9.2 8.4 6.4M18.4 11.2l4.2-2 1-2.8M13.6 18 9.4 20l-1 2.8M18.4 18l4.2 2 1 2.8'/%3E%3Cpath d='M16 20.5c0 5.2 4.6 6.6 6 3.8.9-1.9-.8-3.1-2-2' stroke-width='2.4'/%3E%3C/g%3E%3Cg fill='%233f7d3a'%3E%3Ccircle cx='8.3' cy='6' r='1.3'/%3E%3Ccircle cx='23.7' cy='6' r='1.3'/%3E%3Ccircle cx='8.3' cy='23.2' r='1.3'/%3E%3Ccircle cx='23.7' cy='23.2' r='1.3'/%3E%3Cellipse cx='16' cy='6.8' rx='3.3' ry='3.7'/%3E%3Cellipse cx='16' cy='14.8' rx='3.8' ry='6.3'/%3E%3C/g%3E%3Cg fill='%23e0a02a'%3E%3Ccircle cx='14.7' cy='12.6' r='.9'/%3E%3Ccircle cx='17.3' cy='15' r='.9'/%3E%3Ccircle cx='15' cy='17.6' r='.8'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E">
 <style>
@@ -252,6 +257,9 @@
   .phone-row { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
   .phone-row img { background: #fff; border-radius: 8px; border: 1px solid var(--border); flex: none; }
   .phone-row > div { flex: 1; min-width: 200px; }
+  .steps { margin-top: 6px; } .steps summary { cursor: pointer; font-weight: 600; }
+  .steps ol { margin: 6px 0 0; padding-left: 20px; } .steps li { margin: 4px 0; }
+  .fingerprint { word-break: break-all; font-size: 11.5px; }
   .sys-log { font: 12px/1.45 ui-monospace, Consolas, monospace; background: var(--surface-2); border-radius: 8px; padding: 8px 10px; margin: 8px 0 0; max-height: 220px; overflow: auto; white-space: pre-wrap; }
   .sys-uninstall { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-top: 10px; }
   .sys-uninstall summary { cursor: pointer; font-weight: 600; color: var(--bad); }
@@ -291,6 +299,12 @@
     summary { padding: 6px 0; }
   }
 </style>
+<script>
+// The service worker makes RepTracker installable (D9). Browsers only allow it on a connection they trust:
+// on a phone, after the RepTracker certificate is installed (Settings > Open on your phone).
+window.swReady = ("serviceWorker" in navigator && window.isSecureContext)
+  ? navigator.serviceWorker.register("/sw.js").then(() => true, () => false) : Promise.resolve(false);
+</script>
 </head>
 <body>
 <header>
@@ -490,8 +504,33 @@
           <div>
             <label for="phone-url" style="margin-top:0">Address</label>
             <select id="phone-url"></select>
-            <p class="hint">Scan with the phone's camera, on the same Wi-Fi. The browser warns once about the certificate: tap <em>Advanced</em>, then <em>Proceed</em>. Then add it to the home screen from the browser menu.</p>
+            <p class="hint">Scan with the phone's camera, on the same Wi-Fi.</p>
           </div>
+        </div>
+        <div id="trust-box" hidden>
+          <h3 style="margin:14px 0 4px">Install it as an app</h3>
+          <p class="hint" id="trust-state" style="margin-top:0"></p>
+          <div class="poll-row" style="margin:8px 0">
+            <button class="btn primary" type="button" id="install-app" hidden>Install RepTracker</button>
+            <a class="btn" href="/reptracker-ca.crt" download="reptracker-ca.crt" id="ca-download">Download the RepTracker certificate</a>
+          </div>
+          <details class="steps"><summary>Android: trust RepTracker, then install</summary>
+            <ol>
+              <li>On the phone, open RepTracker (scan the code) and tap <em>Advanced → Proceed</em> once.</li>
+              <li>Tap <em>Download the RepTracker certificate</em> above.</li>
+              <li>Open <em>Settings → Security and privacy → More security settings → Install from device storage → CA certificate</em> (names vary by phone; search Settings for “CA certificate”), tap <em>Install anyway</em> and pick <code>reptracker-ca.crt</code>.</li>
+              <li>Close the browser tab and open RepTracker again: no warning this time. Tap <em>Install RepTracker</em> here, or <em>⋮ → Install app</em>.</li>
+            </ol></details>
+          <details class="steps"><summary>iPhone: trust RepTracker, then add to the home screen</summary>
+            <ol>
+              <li>Open RepTracker in Safari (scan the code) and tap <em>Show Details → visit this website</em> once.</li>
+              <li>Tap <em>Download the RepTracker certificate</em> above, then <em>Allow</em>.</li>
+              <li>Open <em>Settings → Profile Downloaded → Install</em>.</li>
+              <li>Then <em>Settings → General → About → Certificate Trust Settings</em> and turn on <em>RepTracker local authority</em>.</li>
+              <li>Open RepTracker in Safari again, tap <em>Share → Add to Home Screen</em>.</li>
+            </ol></details>
+          <p class="hint">Check that the fingerprint on the phone matches: <code id="ca-fingerprint" class="fingerprint"></code></p>
+          <p class="hint">The certificate can only vouch for RepTracker's own addresses (<code>.local</code> names and home-network addresses), never for other websites. Remove it any time from the phone's security settings.</p>
         </div>
         <p class="hint" id="phone-off" hidden>Only this computer can open RepTracker now. Start it with <code>app.py --lan</code> (the Pi installer does) so phones on the same network can reach it.</p>
       </div>
@@ -1723,11 +1762,32 @@ async function loadPhone() {
   try { info = await readResponse(await fetch("/api/phone")); } catch { return; }
   $("#phone-off").hidden = info.lan && info.links.length > 0;
   $("#phone-box").hidden = !$("#phone-off").hidden;
+  $("#trust-box").hidden = !info.lan;
+  if (info.fingerprint) $("#ca-fingerprint").textContent = info.fingerprint;
+  renderTrust();
   if (!info.links.length) return;
   const sel = $("#phone-url"), keep = sel.value;
   sel.innerHTML = info.links.map(l => `<option value="${esc(l.url)}">${esc(l.label)}</option>`).join("");
   if (info.links.some(l => l.url === keep)) sel.value = keep;
   showPhoneQr();
+}
+// Install: Chrome and Edge offer an install prompt once the site is trusted and the service worker runs.
+let installPrompt = null;
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installPrompt = e; $("#install-app").hidden = false; });
+window.addEventListener("appinstalled", () => { installPrompt = null; $("#install-app").hidden = true; renderTrust(true); });
+$("#install-app").addEventListener("click", async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice; installPrompt = null; $("#install-app").hidden = true;
+});
+async function renderTrust(installed) {
+  const local = ["localhost", "127.0.0.1"].includes(location.hostname);
+  const standalone = installed || matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  const trusted = await window.swReady;
+  $("#trust-state").innerHTML = standalone ? "✓ Running as an installed app."
+    : local ? "Open RepTracker on the phone (scan the code), then follow the steps there."
+    : trusted ? "✓ This browser trusts RepTracker, so it can be installed."
+    : "This browser doesn't trust RepTracker yet (the certificate warning). Install the RepTracker certificate first:";
 }
 function showPhoneQr() { $("#phone-qr").src = `/api/phone/qr.svg?url=${encodeURIComponent($("#phone-url").value)}`; }
 $("#phone-url").addEventListener("change", showPhoneQr);

@@ -93,7 +93,7 @@ class SystemRoutesTest(unittest.TestCase):
 class PhoneTest(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
-        for name, value in {"AUTH_FILE": Path(tmp.name) / "auth.json", "DATA": Path(tmp.name)}.items():
+        for name, value in {"AUTH_FILE": Path(tmp.name) / "auth.json", "DATA": Path(tmp.name), "TLS_DIR": Path(tmp.name) / "tls"}.items():
             p = mock.patch.object(auth, name, value); p.start(); self.addCleanup(p.stop)
         auth._failures.clear()
         import app as webapp
@@ -117,6 +117,37 @@ class PhoneTest(unittest.TestCase):
             self.assertEqual(self.client.get("/api/phone/qr.svg", query_string={"url": "https://example.com"}).status_code, 404)
 
 
+class InstallableAppTest(unittest.TestCase):
+    """What makes RepTracker installable opens without signing in; nothing else does (D9)."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
+        for name, value in {"AUTH_FILE": Path(tmp.name) / "auth.json", "DATA": Path(tmp.name), "TLS_DIR": Path(tmp.name) / "tls"}.items():
+            p = mock.patch.object(auth, name, value); p.start(); self.addCleanup(p.stop)
+        import app as webapp
+        self.client = webapp.app.test_client()   # not signed in
+
+    def test_manifest_worker_icons_and_certificate_are_open(self):
+        import json
+        from cryptography import x509
+        manifest = json.loads(self.client.get("/manifest.webmanifest").data)
+        self.assertEqual((manifest["display"], manifest["start_url"]), ("standalone", "/"))
+        for icon in manifest["icons"]:
+            self.assertEqual(self.client.get(icon["src"]).status_code, 200, icon["src"])
+        worker = self.client.get("/sw.js")
+        self.assertEqual((worker.status_code, worker.mimetype), (200, "text/javascript"))
+        self.assertEqual(self.client.get("/static/offline.html").status_code, 200)
+        ca = self.client.get("/reptracker-ca.crt")
+        self.assertEqual(ca.mimetype, "application/x-x509-ca-cert")
+        self.assertTrue(x509.load_der_x509_certificate(ca.data).extensions.get_extension_for_class(x509.BasicConstraints).value.ca)
+        self.assertNotIn(b"PRIVATE", ca.data)
+
+    def test_everything_else_still_needs_a_sign_in(self):
+        self.assertEqual(self.client.get("/").status_code, 302)
+        self.assertEqual(self.client.get("/api/phone").status_code, 401)
+        self.assertEqual(self.client.get("/api/system").status_code, 401)
+
+
 class CertificateTest(unittest.TestCase):
     def test_local_name_and_remade_after_a_rename(self):
         from cryptography import x509
@@ -130,6 +161,76 @@ class CertificateTest(unittest.TestCase):
             first = (Path(tmp.name) / "cert.pem").read_bytes()
             self.assertIn("reptracker.local", names("reptracker"))
             self.assertNotEqual(first, (Path(tmp.name) / "cert.pem").read_bytes())
+
+
+class AuthorityTest(unittest.TestCase):
+    """RepTracker's own certificate authority (D9): its server certificate verifies like a real one, and the
+    authority can't vouch for any other website, even with its private key (the name constraint)."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
+        for p in (mock.patch.object(auth, "TLS_DIR", Path(tmp.name)),
+                  mock.patch.object(auth, "LanAddresses", return_value=["192.168.1.20", "203.0.113.9"]),
+                  mock.patch.object(auth.socket, "gethostname", return_value="reptracker")):
+            p.start(); self.addCleanup(p.stop)
+
+    def verifier(self, name):
+        import datetime
+        import ipaddress
+        from cryptography import x509
+        from cryptography.x509.verification import DNSName, IPAddress, PolicyBuilder, Store
+        ca, _ = auth.Authority()
+        subject = IPAddress(ipaddress.ip_address(name)) if name[0].isdigit() else DNSName(name)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        return PolicyBuilder().store(Store([ca])).time(now).build_server_verifier(subject)
+
+    def leaf(self, *names):
+        """A certificate for these names, signed with the authority's private key (as a thief could)."""
+        import datetime
+        import ipaddress
+        from cryptography import x509
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
+        ca, caKey = auth.Authority()
+        key = ec.generate_private_key(ec.SECP256R1())
+        now = datetime.datetime.now(datetime.timezone.utc)
+        sans = [x509.IPAddress(ipaddress.ip_address(n)) if n[0].isdigit() else x509.DNSName(n) for n in names]
+        return (x509.CertificateBuilder().subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, names[0])]))
+                .issuer_name(ca.subject).public_key(key.public_key()).serial_number(x509.random_serial_number())
+                .not_valid_before(now - datetime.timedelta(minutes=5)).not_valid_after(now + datetime.timedelta(days=30))
+                .add_extension(x509.SubjectAlternativeName(sans), critical=False)
+                .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+                .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
+                .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(caKey.public_key()), critical=False)
+                .sign(caKey, hashes.SHA256()))
+
+    def test_server_certificate_verifies_for_its_names(self):
+        from cryptography import x509
+        server = x509.load_pem_x509_certificate(Path(auth.Certificate()[0]).read_bytes())
+        for name in ("reptracker.local", "localhost", "192.168.1.20", "127.0.0.1"):
+            self.verifier(name).verify(server, [])
+        sans = server.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+        self.assertNotIn("203.0.113.9", [str(a) for a in sans.get_values_for_type(x509.IPAddress)])   # public: left out
+
+    def test_authority_cannot_vouch_for_other_websites(self):
+        from cryptography.x509.verification import VerificationError
+        for name in ("www.mybank.com", "google.com", "8.8.8.8", "reptracker.local.evil.com"):
+            with self.subTest(name=name), self.assertRaises(VerificationError):
+                self.verifier(name).verify(self.leaf(name), [])
+        with self.assertRaises(VerificationError):   # one outside name spoils the whole certificate
+            self.verifier("reptracker.local").verify(self.leaf("reptracker.local", "google.com"), [])
+        self.verifier("printer.local").verify(self.leaf("printer.local"), [])   # inside the constraint: fine
+
+    def test_keys_stay_private_and_the_authority_is_kept(self):
+        import os
+        auth.Certificate()
+        first = auth.AuthorityCertificate()
+        self.assertEqual(auth.AuthorityCertificate(), first)          # made once
+        self.assertRegex(first[1], r"^([0-9A-F]{2}:){31}[0-9A-F]{2}$")
+        if os.name == "posix":
+            for name in ("ca-key.pem", "key.pem"):
+                self.assertEqual(os.stat(auth.TLS_DIR / name).st_mode & 0o777, 0o600)
 
 
 if __name__ == "__main__":

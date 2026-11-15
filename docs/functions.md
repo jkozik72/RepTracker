@@ -160,6 +160,7 @@ Sign-in (D7). Files: `data/auth.json` (account, password hash), `data/secret_key
 | `CreateAccount` | The first visit's account: username 3 to 40, password 10+ and confirmed, stored as a scrypt hash; refused once one exists | username, password, confirm → (username, id) |
 | `CheckLogin` | Checks a sign-in; repeated wrong passwords lock that address out (30 s doubling to 15 min) | username, password, address → (username, id) |
 | `SecretKey` | The cookie signing key, made once | → text |
+| `Authority` / `AuthorityCertificate` | RepTracker's own certificate authority (D9), made once, name-constrained to `.local`, `localhost` and private addresses; its public certificate (DER) and SHA-256 fingerprint for phones | → (cert, key) / (der, fingerprint) |
 | `Certificate` / `LanAddresses` | A self-signed certificate for this computer's names and LAN addresses; made once, and again when the computer is renamed. The addresses | → (cert, key paths) / list |
 | `HostNames` | The computer's name and its `.local` name | → list |
 
@@ -173,6 +174,8 @@ This installation (D8). Update, restart and uninstall only where `src/pi/install
 | `Info` | Branch, commit, the last task's log | → dict |
 | `Branches` | The branches on GitHub, main first | → list |
 | `Run` | Starts `reptracker-admin` through `sudo -n` (it runs detached) | action, branch, deleteData → dict |
+
+`app.manifest`, `app.service_worker` (`static/sw.js`: an offline page only, no data cached) and `app.authority_certificate` (`/reptracker-ca.crt`) make the site installable (D9) and open without signing in. `tools/make_icons.py` draws `static/icons/`.
 
 `app.PhoneLinks` lists the addresses a phone on the network can open (IP addresses first, then `name.local`; none without `--lan`); `/api/phone/qr.svg` draws one of them as a QR code (segno).
 
@@ -230,6 +233,7 @@ The Claude provider (D4): the Claude API through the `anthropic` package, import
 | `feedingStatus` | Days since the last feeding (dashboard clock) and Fed / Due / Overdue from the profile | animal → status or null |
 | `noteText` | A notification's text with species check labels from the profile | |
 | `shrinkPhoto` / `clearAskPhoto` | Ask: the camera / attach button's photo, shrunk on the device to 1568 px JPEG before it is sent; removing it | |
+| `renderTrust` | Settings: whether this browser trusts RepTracker (its service worker registered), is running as the installed app, or needs the certificate; the Install button appears when the browser offers it | |
 | `loadPhone` / `showPhoneQr` | Settings, Open on your phone: the server's addresses and a QR code for the one picked | |
 | `narrowScreen` | Phones (600px wide or less): charts are drawn 360 wide with fewer labels, so their text stays readable; crossing it redraws | |
 | `loadSystem` / `renderSystem` / `startSystem` | Settings, This installation: branch and commit; update, restart, uninstall, following the task log through the restart | |
