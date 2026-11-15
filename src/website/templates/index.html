@@ -199,6 +199,11 @@
   .profile textarea { font: 12.5px/1.45 ui-monospace, Consolas, monospace; min-height: 360px; }
   .stat dd.out { color: var(--bad); }
   .species-hint { margin: 4px 0 0; }
+  .species-suggest { margin: 4px 0 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .species-suggest:empty { display: none; }
+  .suggest-chip { appearance: none; font: inherit; font-size: 13px; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 999px; padding: 2px 10px; }
+  .suggest-chip:hover { border-color: var(--accent); color: var(--accent); }
+  .suggest-chip em { color: var(--muted); }
 
   /* Settings */
   .settings { padding: 18px; max-width: 640px; display: grid; gap: 18px; }
@@ -296,6 +301,7 @@
           <input id="f-species" name="species" list="species-options" maxlength="60" placeholder="e.g. leopard gecko" required>
           <datalist id="species-options"></datalist>
           <p class="hint species-hint" id="f-species-hint"></p>
+          <p class="hint species-suggest" id="f-species-suggest"></p>
         </div>
         <div>
           <label for="f-width">Enclosure width (cm, optional)</label>
@@ -371,7 +377,9 @@
     <form class="card research-new" id="research-form" autocomplete="off">
       <div style="flex:1 1 260px">
         <label for="research-species">Species, in plain English</label>
-        <input id="research-species" name="species" maxlength="60" placeholder="e.g. crested gecko, red-eared slider, pacman frog" required>
+        <input id="research-species" name="species" list="species-names-list" maxlength="60" placeholder="e.g. crested gecko, red-eared slider, pacman frog" required>
+        <datalist id="species-names-list"></datalist>
+        <p class="hint species-suggest" id="research-suggest"></p>
       </div>
       <button class="btn primary" type="submit">Create profile</button>
       <p class="hint full" id="research-hint"></p>
@@ -1115,7 +1123,8 @@ function speciesHint() {
                          : `No profile yet. Create one on the Research tab for sensor alerts and better analyses.`;
 }
 function fillMediaSelects() {
-  $("#species-options").innerHTML = profiles.map(pr => `<option value="${esc(pr.species)}">${esc(pr.commonName)} · ${esc(pr.scientificName)}</option>`).join("");
+  $("#species-options").innerHTML = profiles.map(pr => `<option value="${esc(pr.species)}">${esc(pr.commonName)} · ${esc(pr.scientificName)} (profile)</option>`).join("")
+    + speciesNames.filter(n => !profiles.some(pr => slugify(pr.commonName) === slugify(n.common))).map(n => `<option value="${esc(n.common)}">${esc(n.scientific)}</option>`).join("");
   speciesHint();
   addForm.querySelectorAll("[data-media]").forEach(sel => {
     const list = media[sel.dataset.media];
@@ -1130,11 +1139,12 @@ function fillMediaSelects() {
     ? `<span style="color:var(--bad)">${mode() === "main" ? "Main" : "Toy"} mode has no ${!media.videos.length ? "videos" : "sensor files"} yet. ${settings.devMode ? "Upload them in Settings." : "Turn on dev mode in Settings to upload them."}</span>`
     : `Videos and sensor files come from ${mode()} mode's media${settings.devMode ? "; upload more in Settings" : ""}.`;
 }
-addForm.elements.species.addEventListener("input", speciesHint);
+addForm.elements.species.addEventListener("input", () => { speciesHint(); renderSuggestions(addForm.elements.species, $("#f-species-suggest")); });
 addForm.addEventListener("change", e => { if (e.target.matches("[data-media='sensors']")) guessUnit(e.target); });
 // The same form adds a lizard or edits one (editingId set). Editing keeps the lizard's id, start time and analyses.
 let editingId = null;
 function closeAdd() {
+  $("#f-species-suggest").innerHTML = "";
   addForm.reset(); addErr.hidden = true; addForm.hidden = true; addBtn.hidden = false; $("#f-coldside").textContent = "Right";
   editingId = null; $("#form-title").textContent = "Add a lizard"; $("#form-submit").textContent = "Create lizard";
 }
@@ -1144,6 +1154,7 @@ function openEdit(l) {
   editingId = l.id;
   $("#form-title").textContent = `Edit ${c.name}`; $("#form-submit").textContent = "Save changes";
   f.name.value = c.name; f.species.value = c.species; f.width.value = c.enclosureWidthCm ?? ""; speciesHint();
+  renderSuggestions(f.species, $("#f-species-suggest"));
   f.view.value = c.camera.view; f.video.value = c.camera.video;
   f.hotSide.value = c.sensors.hotSide; $("#f-coldside").textContent = c.sensors.hotSide === "left" ? "Right" : "Left";
   for (const [key, side] of [["hot", "hot"], ["cold", "cold"]]) {
@@ -1442,6 +1453,84 @@ document.querySelector('[data-file-list="videos"]').addEventListener("click", as
   } catch (x) { err.textContent = x.message; err.hidden = false; }
 });
 
+/* ================= Species names: spelling suggestions ================= */
+// data/species-names.json: commonly kept reptiles and amphibians, plus nicknames. Only for spelling help:
+// any species can still be typed and researched.
+let speciesNames = [];   // [{common, scientific, type, aliases}]
+async function loadSpeciesNames() {
+  try {
+    const rows = await (await fetch("/api/species-names")).json();
+    speciesNames = rows.map(([common, scientific, type, aliases]) => ({ common, scientific, type, aliases: aliases || [] }));
+  } catch { speciesNames = []; }
+  $("#species-names-list").innerHTML = speciesNames.map(n => `<option value="${esc(n.common)}">${esc(n.scientific)} · ${esc(n.type)}</option>`).join("");
+}
+const normName = t => String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+// Edit distance with swapped neighbours counted as one edit ("gekko" ~ "gecko", "lepoard" ~ "leopard").
+function editDistance(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+  }
+  return d[a.length][b.length];
+}
+// How far a typed name is from a known one (0 = same): the whole name, or the closest word (so "gekko" finds "leopard gecko").
+function nameScore(typed, known) {
+  const t = normName(typed), k = normName(known);
+  if (!t || !k) return 1;
+  if (t === k) return 0;
+  let best = editDistance(t, k) / Math.max(t.length, k.length);
+  if (k.startsWith(t) && t.length >= 3) best = Math.min(best, 0.15);
+  const tw = t.split(" "), kw = k.split(" ");
+  // One word that is (nearly) a word of the name, e.g. "gecko" or "geko": a group, so offer its species
+  if (tw.length === 1 && kw.length > 1 && t.length >= 4 && kw.some(w => editDistance(t, w) <= (w.length >= 6 ? 2 : 1))) best = Math.min(best, 0.3);
+  if (tw.length === kw.length && tw.length > 1)   // word by word, for a misspelling in each word
+    best = Math.min(best, tw.reduce((sum, w, i) => sum + editDistance(w, kw[i]) / Math.max(w.length, kw[i].length), 0) / tw.length);
+  return best;
+}
+// Up to 3 suggestions for a typed species, from profiles and the built-in names; exact: the typed name is already known.
+function suggestSpecies(typed) {
+  const t = normName(typed);
+  if (t.length < 3) return { exact: null, list: [] };
+  const candidates = [
+    ...profiles.map(pr => ({ label: pr.commonName, scientific: pr.scientificName, names: [pr.species, pr.commonName, pr.scientificName], profile: true })),
+    ...speciesNames.map(n => ({ label: n.common, scientific: n.scientific, names: [n.common, n.scientific, ...n.aliases], profile: false })),
+  ];
+  let exact = null;
+  const scored = [];
+  for (const c of candidates) {
+    const score = Math.min(...c.names.map(n => nameScore(t, n)));
+    if (score === 0 && !exact) exact = c;
+    if (score > 0 && score <= 0.34) scored.push({ ...c, score });
+  }
+  const seen = new Set(exact ? [normName(exact.label)] : []);
+  const list = scored.sort((a, b) => a.score - b.score || b.profile - a.profile)
+    .filter(c => !seen.has(normName(c.label)) && seen.add(normName(c.label))).slice(0, 3);
+  return { exact, list };
+}
+function renderSuggestions(input, box) {
+  const { exact, list } = suggestSpecies(input.value);
+  if (exact) {
+    const alias = normName(input.value) !== normName(exact.label) && normName(input.value) !== normName(exact.scientific);
+    box.innerHTML = `<span>✓ ${esc(exact.label)} <em>${esc(exact.scientific)}</em>${exact.profile ? " · has a profile" : ""}</span>`
+      + (alias ? ` <button class="suggest-chip" type="button" data-suggest="${esc(exact.label)}">Use “${esc(exact.label)}”</button>` : "");
+    return;
+  }
+  box.innerHTML = list.length ? `<span>Did you mean:</span>` + list.map(c =>
+    `<button class="suggest-chip" type="button" data-suggest="${esc(c.label)}">${esc(c.label)} <em>${esc(c.scientific)}</em>${c.profile ? " · profile" : ""}</button>`).join("") : "";
+}
+// Clicking a suggestion puts it in the field it belongs to
+for (const [inputSel, boxSel] of [["#research-species", "#research-suggest"], ["#f-species", "#f-species-suggest"]]) {
+  const input = $(inputSel), box = $(boxSel);
+  box.addEventListener("click", e => {
+    const chip = e.target.closest("[data-suggest]"); if (!chip) return;
+    input.value = chip.dataset.suggest; input.dispatchEvent(new Event("input", { bubbles: true })); input.focus();
+  });
+}
+$("#research-species").addEventListener("input", e => renderSuggestions(e.target, $("#research-suggest")));
+
 /* ================= Research: species profiles ================= */
 let profiles = [];          // summaries: {slug, species, commonName, scientificName, animalType, image, usedBy, ...}
 let openProfile = null;     // slug shown below the list
@@ -1530,7 +1619,7 @@ async function runResearch(species, regenerate, button) {
   try {
     const rec = await researchApi("POST", "", { species, regenerate });
     openProfile = rec.slug; await loadProfiles(); await loadMode();
-    $("#research-form").reset();
+    $("#research-form").reset(); $("#research-suggest").innerHTML = "";
     $("#profile-view").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (x) { err.textContent = x.message; err.hidden = false; }
   button.disabled = false; button.textContent = label;
@@ -1583,6 +1672,7 @@ async function loadMode() {
 loadMode();
 loadAi();
 loadProfiles();
+loadSpeciesNames();
 </script>
 </body>
 </html>

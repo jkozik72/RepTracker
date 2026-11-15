@@ -154,6 +154,12 @@ def delete_profile(slug):
     return jsonify(main.DeleteProfile(slug))
 
 
+@app.get("/api/species-names")
+def species_names():
+    """Common kept reptiles and amphibians [common, scientific, type, nicknames], for spelling suggestions."""
+    return send_from_directory(main.DATA, "species-names.json")
+
+
 @app.get("/research/<slug>/images/<name>")
 def profile_image(slug, name):
     return send_from_directory(main.research.Folder(slug) / "images", name)

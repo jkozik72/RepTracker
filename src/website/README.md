@@ -36,6 +36,7 @@ Type a species in plain English ("crested gecko", "red-eared slider"). One call 
 - A lizard whose species matches a profile (typed, common or scientific name) gets it in every analysis prompt, and its live sensor readings are checked against it: each side's temperature against its range, humidity as the average of both sides. Out-of-range readings turn red and become alerts.
 - Profiles are AI-written: check them. **Edit** (the JSON) marks a profile as checked; **Regenerate** replaces it; **Delete** removes it and its photos.
 - Works with Claude and the Mock (a labelled placeholder); not with Gemini yet.
+- Spelling help in both species fields: autocomplete and "Did you mean" from `data/species-names.json` (63 commonly kept reptiles and amphibians with scientific names and nicknames such as "beardie") and existing profiles. It only helps with spelling: any species can be typed.
 
 ## Folders (per mode, under `data/<mode>/`)
 
