@@ -91,6 +91,7 @@ say() { printf '  %s\n' "$*"; }
 die() { printf '\n%sError:%s %s\n' "$RED" "$OFF" "$*" >&2; exit 1; }
 trap '[ -n "$RUN_PID" ] && kill "$RUN_PID" 2>/dev/null; printf "\n"; exit 130' INT TERM
 
+ORIG_ARGS=("$@")
 while [ $# -gt 0 ]; do
   case "$1" in
     --branch) BRANCH="${2:-}"; shift 2 ;;
@@ -109,6 +110,23 @@ if [ -n "$BRANCH" ] && ! printf '%s' "$BRANCH" | grep -Eq '^[A-Za-z0-9._][A-Za-z
   die "Not a valid branch name: $BRANCH"
 fi
 HAS_SYSTEMD=0; [ -d /run/systemd/system ] && HAS_SYSTEMD=1
+
+# GitHub's raw file links are cached for about 5 minutes, so a just-pushed fix may not be in the copy that
+# curl fetched. Ask GitHub's API for the branch's latest commit (not cached) and, if this copy is older,
+# run that commit's installer instead. Any failure here just carries on with this copy.
+if [ -z "${REPTRACKER_FRESH:-}" ] && [ "$REPO" = "https://github.com/jkozik72/RepTracker.git" ] && command -v curl >/dev/null; then
+  REF=$BRANCH
+  [ -n "$REF" ] || REF=$(git -C "$APP" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+  REF=${REF:-main}
+  SHA=$(curl -fsS --max-time 10 -H "Accept: application/vnd.github.sha" "https://api.github.com/repos/jkozik72/RepTracker/commits/$REF" 2>/dev/null || true)
+  if printf '%s' "$SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+    FRESH=$(mktemp)
+    if curl -fsS --max-time 30 "https://raw.githubusercontent.com/jkozik72/RepTracker/$SHA/src/pi/install.sh" -o "$FRESH" 2>/dev/null        && [ -s "$FRESH" ] && ! cmp -s "$FRESH" "${BASH_SOURCE[0]:-/dev/null}"; then
+      REPTRACKER_FRESH=1 exec bash "$FRESH" "${ORIG_ARGS[@]}"
+    fi
+    rm -f "$FRESH"
+  fi
+fi
 : > "$LOG"
 printf '%sInstalling RepTracker%s  (details: %s)\n' "$GREEN" "$OFF" "$LOG"
 
