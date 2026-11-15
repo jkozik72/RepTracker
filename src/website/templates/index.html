@@ -1441,6 +1441,7 @@ $("#lizards").addEventListener("click", async e => {
     if (!confirm(`Remove ${l.config.name} from the dashboard? Its folder and data stay on disk.`)) return;
     await api("DELETE", `/lizards/${id}`);
     lizards = lizards.filter(x => x.id !== id); renderLizards(); renderSettings();
+    loadProfiles();   // the Research tab's "used by"
   }
   const send = e.target.closest("[data-action='send']");
   if (send) {
@@ -1617,12 +1618,12 @@ addForm.addEventListener("submit", async e => {
       const updated = await api("PUT", `/lizards/${editingId}`, body);
       closeAdd();
       lizards = lizards.map(l => l.id === updated.id ? updated : l);
-      renderLizards(); renderSettings();
+      renderLizards(); renderSettings(); loadProfiles();
       document.getElementById(`lizard-${updated.id}`).scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
     const created = await api("POST", "/lizards", body);
-    lizards.push(created); closeAdd(); renderLizards(); renderSettings();
+    lizards.push(created); closeAdd(); renderLizards(); renderSettings(); loadProfiles();
     document.getElementById(`lizard-${created.id}`).scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (x) { addErr.textContent = x.message; addErr.hidden = false; }
 });
@@ -1823,26 +1824,63 @@ async function saveSchedule() {
 }
 $("#sched-interval").addEventListener("change", saveSchedule);
 $("#sched-images").addEventListener("change", saveSchedule);
-const deviceName = () => /iPhone|iPad/.test(navigator.userAgent) ? "iPhone" : /Android/.test(navigator.userAgent) ? "Android phone"
+const deviceName = () => /iPhone|iPad/.test(navigator.userAgent) ? "iPhone"
+  : /Android/.test(navigator.userAgent) ? `${(navigator.userAgent.match(/Android [\d.]+; ([^;)]+)/) || [])[1]?.replace(/ Build.*/, "").trim() || "Android phone"} (${browserName()})`
   : `${/Edg\//.test(navigator.userAgent) ? "Edge" : /Firefox/.test(navigator.userAgent) ? "Firefox" : "Chrome"} on ${/Windows/.test(navigator.userAgent) ? "Windows" : /Mac/.test(navigator.userAgent) ? "Mac" : "a computer"}`;
 const keyBytes = b64 => Uint8Array.from(atob((b64 + "===".slice((b64.length + 3) % 4)).replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+// Turning alerts on takes several steps, each of which can fail quietly on a phone; each one shows on the
+// page, has a time limit, and a failure names the step and what the browser reported.
+const withTimeout = (promise, ms, step) => Promise.race([promise,
+  new Promise((_, reject) => setTimeout(() => reject(new Error(`${step}: no answer after ${ms / 1000} s`)), ms))]);
+const browserName = () => /SamsungBrowser/.test(navigator.userAgent) ? "Samsung Internet" : /EdgA?\//.test(navigator.userAgent) ? "Edge"
+  : /Firefox|FxiOS/.test(navigator.userAgent) ? "Firefox" : /CriOS|Chrome/.test(navigator.userAgent) ? "Chrome" : "Safari";
+async function pushDetails() {
+  let worker = "none";
+  try { const reg = await withTimeout(navigator.serviceWorker.getRegistration(), 3000, "worker");
+        worker = reg ? (reg.active ? "active" : reg.installing ? "installing" : reg.waiting ? "waiting" : "registered") : "none"; } catch { worker = "unknown"; }
+  return `${browserName()}, secure connection: ${window.isSecureContext ? "yes" : "no"}, worker: ${worker}, `
+       + `notifications: ${"Notification" in window ? Notification.permission : "not supported"}, push: ${"PushManager" in window ? "yes" : "no"}`;
+}
 $("#alerts-on").addEventListener("click", async () => {
-  schedMessage();
-  if (!(await window.swReady) || !("PushManager" in window)) {
-    schedMessage("error", /iPhone|iPad/.test(navigator.userAgent) && !navigator.standalone
-      ? "On an iPhone, alerts work from the home-screen app: install the certificate, Add to Home Screen, then turn alerts on there."
-      : "This browser can't get alerts yet: install the RepTracker certificate first (Open on your phone, below), then reopen RepTracker.");
-    return;
-  }
-  if (await Notification.requestPermission() !== "granted") { schedMessage("error", "Notifications are blocked for RepTracker in this browser's settings."); return; }
+  const btn = $("#alerts-on"), step = text => schedMessage("ok", text);
+  btn.disabled = true;
+  let stage = "Asking for permission";
   try {
-    const reg = await navigator.serviceWorker.ready;
-    const sub = await reg.pushManager.getSubscription() || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(schedule.publicKey) });
+    if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      throw new Error(/iPhone|iPad/.test(navigator.userAgent) && !navigator.standalone
+        ? "On an iPhone, alerts work from the home-screen app: install the certificate, Add to Home Screen, then turn alerts on there."
+        : "This browser can't receive push notifications.");
+    }
+    // First, while the tap still counts: phones ignore permission requests that don't come straight from a tap.
+    step("Asking for permission to show notifications…");
+    const permission = await withTimeout(Notification.requestPermission(), 60000, stage);
+    if (permission !== "granted") {
+      throw new Error(permission === "denied"
+        ? `Notifications are blocked for RepTracker. In ${browserName()}: ⋮ → Settings → Site settings → Notifications, allow this site, then try again.`
+        : "Notification permission wasn't given (the prompt was closed). Tap the button again and choose Allow.");
+    }
+    stage = "Starting the app's background worker";
+    step(`${stage}…`);
+    if (!(await withTimeout(window.swReady, 10000, stage))) {
+      throw new Error("The browser refused RepTracker's background worker: this phone doesn't trust RepTracker's certificate yet. "
+        + "Install it (Open on your phone, below), then close this tab and open RepTracker again.");
+    }
+    const reg = await withTimeout(navigator.serviceWorker.ready, 15000, stage);
+    stage = "Registering with the push service";
+    step(`${stage}…`);
+    const sub = await reg.pushManager.getSubscription()
+      || await withTimeout(reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(schedule.publicKey) }), 30000, stage);
+    stage = "Saving this device on RepTracker";
+    step(`${stage}…`);
     const res = await readResponse(await fetch("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ subscription: sub.toJSON(), name: deviceName() }) }));
     try { localStorage.setItem(PUSH_DEVICE, res.id); } catch {}
-    schedule.devices = res.devices; renderSchedule(); schedMessage("ok", "Alerts are on for this device. Use Send a test alert to check.");
-  } catch (x) { schedMessage("error", `Couldn't turn alerts on: ${x.message}`); }
+    schedule.devices = res.devices; renderSchedule();
+    schedMessage("ok", "Alerts are on for this device. Tap Send a test alert to check.");
+  } catch (x) {
+    const message = x.message.includes(":") || x.message.endsWith(".") ? x.message : `${stage}: ${x.message}`;
+    schedMessage("error", `Couldn't turn alerts on. ${message} (${await pushDetails()})`);
+  } finally { btn.disabled = false; }
 });
 async function removeDevice(id) {
   const res = await readResponse(await fetch(`/api/push/devices/${encodeURIComponent(id)}`, { method: "DELETE" }));
@@ -2067,7 +2105,8 @@ $("#poll-interval").addEventListener("change", e => {
 $("#dev-mode").addEventListener("change", e => {
   settings.devMode = e.target.checked; saveSettings();
   if (settings.devMode) setClock(realClock());
-  loadMode();
+  loadMode(); renderProfileList();   // Toy animals count in "used by" only in dev mode
+  if (openRecord) $("#profile-view").innerHTML = renderProfile(openRecord);
 });
 $("#mode-toggle").addEventListener("click", e => {
   const b = e.target.closest("[data-mode]"); if (!b || b.dataset.mode === settings.mode) return;
@@ -2219,6 +2258,9 @@ $("#research-species").addEventListener("input", e => renderSuggestions(e.target
 let sensorPatterns = {};    // research.SENSOR_PATTERNS, for the dev-mode generator
 fetch("/api/research-patterns").then(r => r.json()).then(p => { sensorPatterns = p; }).catch(() => {});
 let profiles = [];          // summaries: {slug, species, commonName, scientificName, animalType, image, usedBy, ...}
+// The animals using a profile: Main mode's, and Toy mode's too in dev mode (Toy animals are samples).
+const profileUsers = rec => (rec.usedBy || []).filter(u => u.mode === "main" || settings.devMode)
+  .map(u => u.mode === "main" ? u.name : `${u.name} (toy)`);
 let openProfile = null;     // slug shown below the list
 const slugify = t => String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
 async function researchApi(method, path = "", body) {
@@ -2237,7 +2279,7 @@ function renderProfileList() {
     <button class="card profile-card" type="button" data-profile="${esc(p.slug)}" ${p.slug === openProfile ? 'aria-current="true"' : ""}>
       ${p.image ? `<img src="/research/${esc(p.slug)}/images/${esc(p.image)}" alt="" loading="lazy">` : `<span class="noimg">No photo</span>`}
       <span class="body"><strong>${esc(p.commonName)}</strong><span class="sci">${esc(p.scientificName)}</span>
-        <span class="hint" style="margin:0">${esc(p.animalType)}${p.usedBy.length ? ` · used by ${p.usedBy.length}` : ""}${p.edited ? " · edited" : ""}</span></span>
+        <span class="hint" style="margin:0">${esc(p.animalType)}${profileUsers(p).length ? ` · used by ${profileUsers(p).length}` : ""}${p.edited ? " · edited" : ""}</span></span>
     </button>`).join("") : `<div class="card empty" style="grid-column:1/-1">No species profiles yet. Type a species above.</div>`;
 }
 const rng = (r, unit = "") => r.min === r.max ? `${+r.min.toFixed(1)}${unit}` : `${+r.min.toFixed(1)}–${+r.max.toFixed(1)}${unit}`;
@@ -2295,7 +2337,7 @@ function renderProfile(rec) {
       <p class="ok-msg" data-gen-ok hidden></p></div>` : ""}
     <div class="caution"><strong>Confidence:</strong> ${esc(p.confidence)} Dashboard alerts use these ranges; check them against a care sheet or a vet.</div>
     <p class="hint" style="margin:0">Typed as "${esc(rec.species)}" · ${esc(rec.provider || "?")}${rec.model ? ` (${esc(rec.model)})` : ""} · ${esc(fmtShort(Date.parse(rec.createdAt)))}
-      ${rec.tokens ? ` · ${rec.tokens.total.toLocaleString()} tokens` : ""} · used by ${rec.usedBy.length ? esc(rec.usedBy.join(", ")) : "no animals yet"} · research/${esc(rec.slug)}/profile.json</p>
+      ${rec.tokens ? ` · ${rec.tokens.total.toLocaleString()} tokens` : ""} · used by ${profileUsers(rec).length ? esc(profileUsers(rec).join(", ")) : "no animals"} · research/${esc(rec.slug)}/profile.json</p>
     ${rec.notes?.length ? `<p class="hint" style="margin:0">Notes: ${esc(rec.notes.join(" "))}</p>` : ""}
     <div data-profile-editor hidden>
       <label for="profile-json">Profile JSON (prompts/profile-schema.json). Saving marks it as checked.</label>
@@ -2365,7 +2407,7 @@ $("#profile-view").addEventListener("click", async e => {
     runResearch(openRecord.species, true, btn);
   }
   if (act === "delete") {
-    const users = openRecord.usedBy.length ? ` ${openRecord.usedBy.join(", ")} will have no profile.` : "";
+    const users = profileUsers(openRecord).length ? ` ${profileUsers(openRecord).join(", ")} will have no profile.` : "";
     if (!confirm(`Delete the ${openRecord.profile.commonName} profile and its photos?${users}`)) return;
     try { profiles = await researchApi("DELETE", `/${openRecord.slug}`); openProfile = openRecord = null; view.innerHTML = ""; renderProfileList(); await loadMode(); }
     catch (x) { err.textContent = x.message; err.hidden = false; }
