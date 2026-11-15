@@ -67,6 +67,24 @@ def remove_lizard(mode, lizard_id):
     return "", 204
 
 
+# ---------- AI provider (one choice for this computer, not per mode) ----------
+
+@app.get("/api/ai")
+def ai_status():
+    return jsonify(main.AiStatus())
+
+
+@app.post("/api/ai")
+def set_ai_provider():
+    body = request.get_json(force=True) or {}
+    return jsonify(main.SetProvider(body.get("provider")))
+
+
+@app.post("/api/ai/test")
+def test_ai_provider():
+    return jsonify(main.TestProvider())
+
+
 # ---------- prompts and AI ----------
 
 @app.post("/api/<mode>/lizards/<lizard_id>/prompts")

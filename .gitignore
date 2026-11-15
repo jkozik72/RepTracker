@@ -27,3 +27,6 @@ src/website/data/*/reptiles/*/analyses.json
 
 # Main-mode data is the keeper's own (uploads, lizards); only toy-mode samples are committed
 src/website/data/main/
+
+# Which AI provider this computer uses (chosen in Settings)
+src/website/data/ai-settings.json

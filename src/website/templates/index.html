@@ -154,6 +154,8 @@
   .file-list { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
   .file-list li { font: 12.5px ui-monospace, Consolas, monospace; background: var(--surface-2); padding: 2px 8px; border-radius: 6px; }
   .ok-msg { color: var(--ok); font-size: 13px; font-weight: 600; margin: 6px 0 0; }
+  .provider { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; margin-top: 8px; } .provider input { margin-top: 4px; }
+  .provider .state { font-size: 12px; font-weight: 600; margin-left: 6px; } .provider .state.ok { color: var(--ok); } .provider .state.bad { color: var(--bad); }
 
   @media (max-width: 760px) {
     .lizard, .add-form, .add-form fieldset, .charts, .lizards.compact { grid-template-columns: minmax(0, 1fr); }
@@ -299,6 +301,16 @@
         <span><strong>Dev mode</strong><br><span class="hint" style="margin:0">Clock controls above the alerts (speed, set time, pause, resume), a prompt inspector on each lizard, Toy / Main data, and uploads.</span></span>
       </label>
 
+      <div id="ai-settings">
+        <h2>AI provider</h2>
+        <div id="ai-providers" role="radiogroup" aria-label="AI provider"></div>
+        <div class="form-actions" style="justify-content:flex-start;margin-top:10px">
+          <button class="btn" type="button" id="ai-test">Test connection</button>
+          <span class="hint" style="margin:0">Sends one short request to the provider in use.</span>
+        </div>
+        <p class="error" id="ai-error" hidden></p><p class="ok-msg" id="ai-ok" hidden></p>
+      </div>
+
       <div class="dev-settings" id="dev-settings" hidden>
         <div>
           <h2>Data</h2>
@@ -382,6 +394,14 @@ async function api(method, path, body) {
 /* ================= Data ================= */
 let media = { videos: [], sensors: [] };
 let lizards = [];                 // [{id, config, latest}]
+// The AI provider is one choice for this computer, not per mode: {provider, providers: [{name, label, ready, detail}]}
+let ai = { provider: "mock", providers: [] };
+async function aiApi(method, path, body) {
+  return readResponse(await fetch(`/api/ai${path}`, {
+    method, headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined,
+  }));
+}
+const sendLabel = () => `Send to AI (${ai.provider})`;
 const seriesCache = {};           // "mode/name" -> Promise<{step, v}>
 
 // Sensor file: {"t": ms between samples, "value": [samples]}
@@ -475,7 +495,7 @@ function renderAnalysis(l) {
   return `<p>${esc(r.Analysis || "")}</p>
     ${alerts.length ? `<p style="color:var(--bad);font-weight:600;margin-top:8px">Needs attention:</p><ul>${alerts.map(a => `<li>${esc(a)}</li>`).join("")}</ul>`
                     : `<p style="color:var(--ok);font-weight:600">No hazards reported.</p>`}
-    <p class="hint">Range ${esc(fmtShort(Date.parse(l.latest.range.start)))} – ${esc(fmtShort(Date.parse(l.latest.range.end)))} · provider: ${esc(l.latest.provider)}</p>`;
+    <p class="hint">Range ${esc(fmtShort(Date.parse(l.latest.range.start)))} – ${esc(fmtShort(Date.parse(l.latest.range.end)))} · provider: ${esc(l.latest.provider)}${l.latest.model ? ` (${esc(l.latest.model)})` : ""}</p>`;
 }
 
 function renderLizard(l) {
@@ -719,7 +739,7 @@ async function showBundle(card, lizardId, m) {
         <div class="thumbs">${c.frames.map(f => `<figure><img loading="lazy" src="${base + f.file}" alt="Frame at ${esc(f.label)}"><figcaption>${esc(f.label.slice(11, 16))} · v${f.videoSeconds}s</figcaption></figure>`).join("")}</div>
       </div>`).join("")}
     <div class="form-actions" style="justify-content:flex-start">
-      <button class="btn dev" type="button" data-action="send" data-bundle="${esc(m.bundleId)}">Send to AI (mock)</button>
+      <button class="btn dev" type="button" data-action="send" data-bundle="${esc(m.bundleId)}">${esc(sendLabel())}</button>
       <span class="hint" style="margin:0">Updates the stats, analysis and position graph.</span>
     </div>`;
 }
@@ -743,12 +763,12 @@ $("#lizards").addEventListener("click", async e => {
   const send = e.target.closest("[data-action='send']");
   if (send) {
     const err = card.querySelector("[data-dev-error]");
-    send.disabled = true; send.textContent = "Sending…"; err.hidden = true;
+    send.disabled = true; send.textContent = ai.provider === "mock" ? "Sending…" : "Sending… a real AI call can take a minute"; err.hidden = true;
     try {
       const entry = await api("POST", `/lizards/${id}/prompts/${send.dataset.bundle}/send`);
       replaceLizard({ ...l, latest: entry });
       document.getElementById(`lizard-${id}`).querySelector(".analysis").scrollIntoView({ behavior: "smooth", block: "center" });
-    } catch (x) { err.textContent = x.message; err.hidden = false; send.disabled = false; send.textContent = "Send to AI (mock)"; }
+    } catch (x) { err.textContent = x.message; err.hidden = false; send.disabled = false; send.textContent = sendLabel(); }
   }
 });
 
@@ -843,6 +863,35 @@ tabs.forEach(t => {
   });
 });
 
+/* Settings: AI provider (saved on the server, so it survives reloads and is the same in Toy and Main) */
+function renderAi() {
+  $("#ai-providers").innerHTML = ai.providers.map(p => `
+    <label class="provider"><input type="radio" name="ai-provider" value="${esc(p.name)}" ${p.name === ai.provider ? "checked" : ""}>
+      <span><strong>${esc(p.label)}</strong><span class="state ${p.ready ? "ok" : "bad"}">${p.ready ? "Ready" : "Not ready"}</span><br>
+        <span class="hint" style="margin:0">${esc(p.detail)}</span></span></label>`).join("");
+  document.querySelectorAll("[data-action='send']").forEach(b => { if (!b.disabled) b.textContent = sendLabel(); });
+}
+function aiMessage(kind, text) {
+  $("#ai-error").hidden = $("#ai-ok").hidden = true;
+  if (text) { const el = $(kind === "ok" ? "#ai-ok" : "#ai-error"); el.textContent = text; el.hidden = false; }
+}
+$("#ai-providers").addEventListener("change", async e => {
+  if (e.target.name !== "ai-provider") return;
+  aiMessage();
+  try {
+    ai = await aiApi("POST", "", { provider: e.target.value });
+    aiMessage("ok", `Using ${ai.providers.find(p => p.name === ai.provider).label}.`);
+  } catch (x) { aiMessage("error", x.message); }
+  renderAi();
+});
+$("#ai-test").addEventListener("click", async e => {
+  const btn = e.currentTarget;
+  btn.disabled = true; btn.textContent = "Testing…"; aiMessage();
+  try { aiMessage("ok", (await aiApi("POST", "/test")).message); }
+  catch (x) { aiMessage("error", x.message); }
+  btn.disabled = false; btn.textContent = "Test connection";
+});
+
 /* Settings: dev mode, toy/main, uploads (all apply immediately) */
 function renderSettings() {
   $("#dev-mode").checked = settings.devMode;
@@ -887,13 +936,13 @@ async function loadMode() {
   $("#load-error").hidden = true;
   closeAdd();
   try {
-    [media, lizards] = await Promise.all([api("GET", "/media"), api("GET", "/lizards")]);
+    [media, lizards, ai] = await Promise.all([api("GET", "/media"), api("GET", "/lizards"), aiApi("GET", "")]);
   } catch (x) {
     media = { videos: [], sensors: [] }; lizards = [];
     $("#load-error").textContent = `Couldn't reach the RepTracker server: ${x.message}. Run app.py and open http://127.0.0.1:5000.`;
     $("#load-error").hidden = false;
   }
-  renderDevBar(); renderSettings(); renderViewToggle(); renderLizards();
+  renderDevBar(); renderSettings(); renderAi(); renderViewToggle(); renderLizards();
 }
 loadMode();
 </script>
