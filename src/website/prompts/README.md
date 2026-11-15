@@ -6,7 +6,7 @@ Every prompt RepTracker sends is built from the files here, so they can be read 
 |---|---|---|
 | `system.txt` | System prompt for every analysis request | `GeneratePrompts` |
 | `context-chunk.txt` | The CONTEXT chunk: lizard config, sensor summary for the range, species research, previous analysis | `GeneratePrompts` |
-| `images-chunk.txt` | Text sent with each IMAGES chunk; the chunk's PDF holds up to 60 images, 1 per minute | `GeneratePrompts` |
+| `images-chunk.txt` | Text sent with each IMAGES chunk; the chunk's PDF holds up to 60 images, spread evenly over the range (at most 1 per minute); `{{image_spacing}}` says how far apart | `GeneratePrompts` |
 | `response-schema.json` | JSON Schema the AI's answer must match; also pasted into `system.txt`. It is not sent to the provider as a separate schema; `ai.NormalizeResult` forces the reply into it | `GeneratePrompts`, `SendPrompt` |
 | `ask.txt` | A keeper's question from the dashboard; `{{image_note}}` says whether the current camera picture is attached (vision) | `AskQuestion` |
 

@@ -19,14 +19,14 @@ Open http://127.0.0.1:5000.
 |---|---|---|
 | Data shown | Main | Toy or Main (switch in Settings) |
 | Clock | Real time | Clock bar above the alerts: speed, set time, pause, resume |
-| Uploads | — | Videos (.mp4, several at once, up to 3 GB each, with a progress bar) and sensor files (.json) into the current mode, in Settings |
+| Uploads | — | Videos (.mp4, several at once, up to 3 GB each, with a progress bar) and sensor files (.json) into the current mode, in Settings; uploaded videos can be deleted there (× ; not samples, not while a lizard uses them) |
 | Per lizard | — | Generate, inspect and send prompts for a time range |
-| Hourly AI call (Settings, off by default) | Each hour mark of real time | Each hour mark of the dev clock (faster when sped up) |
+| AI polling (Settings: interval 15 min to 6 h, images per interval, Start / Stop; stopped when the page loads) | Each interval mark of real time | Each interval mark of the dev clock (faster when sped up) |
 
 - **Toy** (`data/toy/`): sample lizards, videos and sensors, committed.
 - **Main** (`data/main/`): starts empty; the keeper uploads media and adds lizards. Git-ignored.
 
-The dashboard shows lizards 2 per row, compact (name, alerts, video). Clicking a name opens that lizard to full width; clicking it again closes it.
+The dashboard shows lizards 2 per row, compact (name, alerts, video). Clicking a name opens that lizard to full width; clicking it again closes it. Open, a lizard's video has a full-screen button (Esc exits), and the AI analysis panel has **Analyze**: the last 15 min to 6 h, ending now, sent with the provider in use and the image count set under AI polling. No dev mode needed.
 
 ## Folders (per mode, under `data/<mode>/`)
 
@@ -69,25 +69,26 @@ The project uses the **Claude API** ([D4](../../docs/decisions.md)). Three provi
 | Provider | What it is | Needs |
 |---|---|---|
 | **Mock** (default) | Offline stand-in: position from dark pixels, placeholders for everything else | Nothing |
-| **Claude** | The Claude API (`claude_ai.py`), model `claude-opus-5-5` | An Anthropic API key |
+| **Claude** | The Claude API (`claude_ai.py`); model chosen in Settings | An Anthropic API key |
 | **Gemini** | Gemini through Google Vertex AI (`ai.py`) | A Google Cloud project with Vertex AI enabled, and this computer signed in to it |
 
 ### Set up Claude (once per computer)
 
 1. Make an API key in the Claude Console (API keys page).
 2. In the app: **Settings → dev mode → AI provider → Claude**, paste the key, **Save key**.
-3. Select **Claude**, then **Test connection**. The same check from a terminal: `python claude_ai.py`.
+3. Pick a **Model** (below the key), select **Claude**, then **Test connection**. The same check from a terminal: `python claude_ai.py`.
 
 The key is kept only on the computer that runs `app.py`, in `data/claude-key.json` (git-ignored), and the page only ever shows a masked version (`sk-ant-…1234`). **Remove** deletes it. Without a saved key, the `ANTHROPIC_API_KEY` environment variable is used instead.
 
-- One analysis is one request. The reply is constrained to `prompts/response-schema.json` (structured outputs). If Claude declines a request, Anthropic's server-side fallback re-runs it on another Claude model in the same call; the saved analysis notes it.
+- Models (list prices per million tokens): **Opus 5.5** $4 in / $20 out (default, most capable); **Sonnet 5.5** $2 / $10; **Haiku 5.5** $0.10 / $0.50, cheapest ($0.50 / $2.50 for prompts over 100K tokens; a 1-hour range with 60 images is close to that). The choice is kept in `data/claude-settings.json` (git-ignored).
+- One analysis is one request. The reply is constrained to `prompts/response-schema.json` (structured outputs). If Claude declines a request, Anthropic's server-side fallback re-runs it on another Claude model in the same call; the saved analysis notes it. Haiku 5.5 has no fallback: a refusal there fails and nothing is saved.
 - Limits checked before sending: 30 MB per request and 600 PDF pages (images). Longer ranges ask for a shorter one.
 - Each call is billed to the key's Anthropic account.
 
 | Environment variable (optional) | Default |
 |---|---|
 | `ANTHROPIC_API_KEY` | none; used only when no key is saved in Settings |
-| `REPTRACKER_CLAUDE_MODEL` | `claude-opus-5-5` |
+| `REPTRACKER_CLAUDE_MODEL` | `claude-opus-5-5`; used only when no model is chosen in Settings |
 
 ### Set up Gemini (once per computer)
 

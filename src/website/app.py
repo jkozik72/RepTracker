@@ -51,6 +51,11 @@ def upload_media(mode, kind):
     return jsonify(main.SaveUpload(mode, kind, file)), 201
 
 
+@app.delete("/api/<mode>/media/videos/<name>")
+def delete_video(mode, name):
+    return jsonify(main.DeleteVideo(mode, name))
+
+
 @app.get("/media/<mode>/videos/<path:name>")
 def video(mode, name):
     return send_from_directory(main.VideosDir(mode), name)
@@ -72,6 +77,11 @@ def lizards(mode):
 @app.post("/api/<mode>/lizards")
 def create_lizard(mode):
     return jsonify(main.CreateNewLizard(mode, request.get_json(force=True) or {})), 201
+
+
+@app.put("/api/<mode>/lizards/<lizard_id>")
+def update_lizard(mode, lizard_id):
+    return jsonify(main.UpdateLizard(mode, lizard_id, request.get_json(force=True) or {}))
 
 
 @app.delete("/api/<mode>/lizards/<lizard_id>")
@@ -99,6 +109,12 @@ def save_claude_key():
     return jsonify(main.SaveClaudeKey(body.get("key")))
 
 
+@app.post("/api/ai/claude-model")
+def set_claude_model():
+    body = request.get_json(force=True) or {}
+    return jsonify(main.SetClaudeModel(body.get("model")))
+
+
 @app.delete("/api/ai/claude-key")
 def remove_claude_key():
     return jsonify(main.RemoveClaudeKey())
@@ -114,7 +130,7 @@ def test_ai_provider():
 @app.post("/api/<mode>/lizards/<lizard_id>/prompts")
 def generate_prompts(mode, lizard_id):
     body = request.get_json(force=True) or {}
-    return jsonify(main.GeneratePrompts(mode, lizard_id, body.get("start"), body.get("end")))
+    return jsonify(main.GeneratePrompts(mode, lizard_id, body.get("start"), body.get("end"), body.get("images")))
 
 
 @app.get("/api/<mode>/lizards/<lizard_id>/prompts/<bundle_id>/<path:file>")
@@ -131,7 +147,7 @@ def send_prompts(mode, lizard_id, bundle_id):
 @app.post("/api/<mode>/lizards/<lizard_id>/ask")
 def ask(mode, lizard_id):
     body = request.get_json(force=True) or {}
-    return jsonify(main.AskQuestion(mode, lizard_id, body.get("question"), body.get("now"), bool(body.get("vision"))))
+    return jsonify(main.AskQuestion(mode, lizard_id, body.get("question"), body.get("now"), bool(body.get("vision", True))))
 
 
 if __name__ == "__main__":

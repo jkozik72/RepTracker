@@ -65,6 +65,9 @@ Every function that touches lizard data takes `mode` first: `toy` or `main`, eac
 | Function | Does | In → out |
 |---|---|---|
 | `CreateNewLizard` | Validates the add-lizard form, writes `reptiles/<id>/config.json`, adds it to `reptiles.json` | mode, form dict → `{id, config, latest}` |
+| `LizardConfigFromForm` | Validates the add/edit-lizard form into a config (name, species, width, camera, sensors) | mode, form dict, createdAt → config |
+| `UpdateLizard` | Edits a lizard: new config from the form; keeps its id, `createdAt` and analyses; renames it in `reptiles.json` | mode, id, form dict → `{id, config, latest}` |
+| `DeleteVideo` | Deletes an uploaded camera video for good; refuses the committed samples and a video a lizard still uses | mode, name → same as `ListMedia` |
 | `RemoveLizard` | Takes a lizard off `reptiles.json`; its folder stays | mode, id → none |
 | `ListLizards` | Every listed lizard with its config and latest analysis | mode → list |
 | `ListMedia` | Video and sensor file names without extension; sensors include the defaults | mode → `{videos, sensors, defaultSensors}` |
@@ -79,18 +82,19 @@ Every function that touches lizard data takes `mode` first: `toy` or `main`, eac
 | `ParsePDF` | Images into one PDF, one page each, labelled with its timestamp | images, labels, path → PDF file |
 | `PositionScale` | Prompt values for the position unit: cm from the left wall, or % of the image width when no enclosure width is set | config → `{enclosure_width, position_unit, position_max}` |
 | `FillTemplate` | Fills `{{key}}` in a file from `prompts/` | file name, values → text |
-| `GeneratePrompts` | Builds the lizard's prompt chunk for a range: context + one IMAGES chunk per 60 images (1/min); writes a bundle with `manifest.json`. Never sends a video moment twice: a range longer than the video is cut to its last part that fits in one pass | mode, id, start, end (ISO) → manifest |
+| `GeneratePrompts` | Builds the lizard's prompt chunk for a range: context + one IMAGES chunk per 60 images; writes a bundle with `manifest.json`. Images: `imageCount` spread evenly, at least 1 min apart (None: 1 per minute). Never sends a video moment twice: a range longer than the video is cut to its last part that fits in one pass | mode, id, start, end (ISO), imageCount or None → manifest (with `imageSpacingS`) |
 | `SendPrompt` | Sends a bundle to the provider in use and appends the answer to `analyses.json`. Saves nothing if the provider fails | mode, id, bundle id → analysis entry: `{bundleId, provider, range, sentAt, result}`, plus `model`, `seconds`, `tokens`, `notes` when the provider gives them |
 | `MockProvider` | Offline stand-in for the AI (Q11): position from the darkest pixels of each frame, every other field "can't see" | bundle → schema-shaped result |
 | `ClaudeProvider` | The project's provider (D4): hands the bundle to `claude_ai.AnalyzeBundle` | bundle → schema-shaped result with `_details` |
 | `GeminiProvider` | The Gemini provider, still selectable: hands the bundle to `ai.AnalyzeBundle` | bundle → schema-shaped result with `_details` |
-| `AskQuestion` | Answers a keeper's question from `prompts/ask.txt` with the provider in use; with vision, sends the current camera picture too | mode, id, question, now, vision → `{answer, prompt, provider}`, plus `image` (a `data:` URL) with vision |
+| `AskQuestion` | Answers a keeper's question from `prompts/ask.txt` with the provider in use, always with the current camera picture (none before the camera starts) | mode, id, question, now, vision (default on) → `{answer, prompt, provider}`, plus `image` (a `data:` URL) with vision |
 | `CurrentPicture` | The camera picture at a moment, as JPEG bytes (at most 1280 px wide), for a question with vision | mode, config, datetime → bytes |
 | `CurrentProvider` | The provider chosen for this computer, from `data/ai-settings.json` (git-ignored); `mock` if none | none → `mock`, `claude` or `gemini` |
 | `AiStatus` | What Settings shows: the provider in use, and for each provider whether it is ready and why | none → `{provider, providers: [{name, label, ready, detail}]}`; Claude's entry adds `apiKey: {saved, mask}`, never the key |
 | `SetProvider` | Chooses the provider for this computer; refuses one that is not ready | name → same as `AiStatus` |
 | `TestProvider` | One tiny request to the provider in use (`PINGS`), to prove the connection | none → `{provider, ok, message}` |
 | `SaveClaudeKey` | Saves the Anthropic API key on this computer through `claude_ai.SaveKey` | key → same as `AiStatus` |
+| `SetClaudeModel` | Chooses the Claude model through `claude_ai.SetModel` | model id → same as `AiStatus` |
 | `RemoveClaudeKey` | Deletes the saved key; switches back to the Mock if Claude was in use and is no longer ready | none → same as `AiStatus` |
 
 ### `src/website/ai.py`
@@ -124,6 +128,8 @@ The Claude provider (D4): the Claude API through the `anthropic` package, import
 | `ApiKey` | The key to use: the one saved in Settings, else `ANTHROPIC_API_KEY` | none → (key, where it came from) |
 | `SaveKey` | Checks the key looks like an Anthropic key (`sk-ant-…`) and writes `data/claude-key.json` (git-ignored) | key → none |
 | `RemoveKey` | Deletes the saved key | none → none |
+| `Settings` | The model: the one chosen in Settings (`MODELS`), else `REPTRACKER_CLAUDE_MODEL`, else `claude-opus-5-5` | none → `{model}` |
+| `SetModel` | Saves the model choice in `data/claude-settings.json` (git-ignored); only ids from `MODELS` | model id → none |
 | `MaskKey` | First 7 and last 4 characters, for showing on screen | key → text |
 | `Status` | Whether Claude is set up (package, key), without calling it | none → `{ready, detail, keySaved, keyMask}` |
 | `GetClient` | The `anthropic` client for the current key, made on first use | none → client |
@@ -141,6 +147,8 @@ The Claude provider (D4): the Claude API through the `anthropic` package, import
 |---|---|
 | `mode` | The data set on screen: Toy or Main in dev mode, always Main otherwise |
 | `loadMode` | Loads the current mode's media and lizards and redraws everything |
+| `renderVideoBox` | The camera video with its time and source labels; in the expanded card, a full-screen button (the browser's Fullscreen API) |
+| `openEdit` | Opens the add-lizard form filled in with a lizard's settings, to save changes to it |
 | `toggleExpand` | Opens a lizard from compact to full width, or closes it |
 | `positionScale` | Client-side twin of `PositionScale`: the position chart's unit and maximum |
 | `loadAi` | Loads the AI provider status on its own, so a slow check never delays the lizards: at start, when Settings opens, after a test or a refused switch |
@@ -150,9 +158,13 @@ The Claude provider (D4): the Claude API through the `anthropic` package, import
 | `syncVideo` | Keeps the camera video at the moment matching the clock; loops like a live feed |
 | `readSeries` | Client-side twin of `ReadSensor` |
 | `renderSensorCharts` | Temperature and humidity graphs, window growing to 5 days then sliding |
-| `renderPositionChart` | Position (cm from the left wall, or %) from the latest analysis' Movement Data, times in local time |
+| `renderPositionChart` | Position (cm from the left wall, or %) from the latest analysis' Movement Data, times in local time. Images where the lizard was not visible: a dashed line joins the positions before and after, and a tick on the bottom marks each one |
+| `renderMarkdown` | An AI answer's Markdown as HTML (headings, paragraphs, lists, code, bold, italic, http links); escapes everything first | text → HTML |
 | `labelToLocal` | An image label ("2026-11-14 10:54 UTC") as a local time |
-| `hourlyTick` | Hourly AI call: at each hour mark of the dashboard clock, starts `runHourly` for each lizard that has no call in flight |
-| `runHourly` | Generates and sends the prompts for the hour that just ended, updates the lizard, and reports in the status line under the summary |
+| `pollTick` | AI polling: at each interval mark of the dashboard clock, starts `runPoll` for each lizard that has no call in flight |
+| `runPoll` | Generates and sends the prompts for the interval that just ended, updates the lizard, and reports in the status line under the summary |
+| `setPolling` | Starts or stops AI polling (always stopped when the page loads); Start waits for the next interval mark |
+| `renderPolling` | The AI polling controls in Settings: interval, images per interval, Start / Stop, and the next mark |
+| `imageOptions` | The Images menu (1 per minute, or 5 to 60 spread evenly), shared by AI polling and the dev panel |
 | `uploadWithProgress` | Uploads a file with a progress callback (XMLHttpRequest, since fetch can't report upload progress) |
 | `showBundle` | The dev-mode prompt inspector: system prompt, schema, context chunk, each IMAGES chunk with its PDF and frames |

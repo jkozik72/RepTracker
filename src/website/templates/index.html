@@ -94,6 +94,10 @@
   .video .badge { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,.62); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; letter-spacing: .03em; font-variant-numeric: tabular-nums; }
   .video .badge.r { left: auto; right: 8px; }
   .video .badge { max-width: calc(50% - 12px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .video-fs { position: absolute; right: 8px; bottom: 8px; appearance: none; border: 0; border-radius: 6px; background: rgba(0,0,0,.62); color: #fff; font-size: 18px; line-height: 1; padding: 6px 9px; cursor: pointer; }
+  .video-fs:hover { background: rgba(0,0,0,.8); }
+  .video:fullscreen { border-radius: 0; aspect-ratio: auto; width: 100vw; height: 100vh; }
+  .video:fullscreen .badge { font-size: 14px; padding: 4px 10px; max-width: calc(50% - 16px); }
   .video .cover { position: absolute; inset: 0; display: grid; place-items: center; background: #0d0f0c; text-align: center; padding: 16px; }
   .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
   .stat { background: var(--surface-2); border-radius: 8px; padding: 7px 10px; }
@@ -104,11 +108,17 @@
   .stat.hot dt::before { background: var(--hot); } .stat.cold dt::before { background: var(--cold); }
   .panel { background: var(--surface-2); border-radius: 10px; padding: 12px 14px; min-width: 0; }
   .analysis p { margin: 0 0 6px; } .analysis ul { margin: 4px 0 0; padding-left: 18px; }
+  .analyze-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; } .analyze-row select { width: auto; }
   .ask form { display: flex; gap: 8px; flex-wrap: wrap; } .ask form input[name="q"] { flex: 1 1 200px; width: auto; }
-  .ask .vision { flex-basis: 100%; display: flex; gap: 6px; align-items: center; font-weight: 500; font-size: 13px; margin: 0; color: var(--muted); }
   .asked-picture { display: block; max-width: 220px; border-radius: 6px; margin: 4px 0; }
   .chat { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; max-height: 220px; overflow-y: auto; font-size: 14px; }
   .chat .q { font-weight: 600; } .chat .a { color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .chat .a.md { white-space: normal; color: var(--text); }
+  .md p { margin: 0 0 6px; } .md p:last-child { margin-bottom: 0; } .md .md-h { font-weight: 700; margin-top: 8px; }
+  .md ul, .md ol { margin: 2px 0 6px; padding-left: 20px; } .md li { margin: 1px 0; }
+  .md code { font: 12.5px ui-monospace, Consolas, monospace; background: var(--surface); padding: 1px 4px; border-radius: 4px; }
+  .md .md-code { max-height: 200px; margin: 4px 0 6px; } .md .md-code code { background: none; padding: 0; }
+  .md a { color: var(--accent); }
   .chat .a.err { color: var(--bad); font-weight: 600; }
   .chat details summary { font-size: 12px; color: var(--muted); cursor: pointer; }
   .charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -123,11 +133,14 @@
   .lizard-name.open { appearance: none; border: 0; background: none; padding: 0; font: inherit; font-size: 20px; font-weight: 700; color: var(--text); cursor: pointer; }
   .lizard-name.open:hover, .compact-head .open:hover { color: var(--accent); }
   .open .chev { font-size: .7em; color: var(--muted); margin-left: 6px; }
-  .lizard.compact { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
-  .compact-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .lizard.compact { display: flex; flex-direction: column; gap: 10px; padding: 12px; min-width: 0; }
+  .compact-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; min-width: 0; }
+  .compact-head .open { flex: none; }
   .compact-head .open { appearance: none; border: 0; background: none; padding: 0; font: inherit; font-size: 17px; font-weight: 700; color: var(--text); cursor: pointer; text-align: left; }
   .compact-head .open:hover { color: var(--accent); }
-  .compact-alerts { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+  .compact-alerts { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; min-width: 0; flex: 1 1 auto; }
+  /* A long alert stays inside its card: one line, cut off with "…"; the full text is in the tooltip and the summary bar */
+  .compact-alerts .pill { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 
   /* Dev prompt panel */
   .devpanel { border: 1px dashed var(--dev); background: var(--dev-bg); border-radius: 10px; padding: 12px 14px; }
@@ -159,6 +172,7 @@
 
   /* Settings */
   .settings { padding: 18px; max-width: 640px; display: grid; gap: 18px; }
+  .poll-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .poll-row select { width: auto; }
   .check { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; } .check input { margin-top: 4px; }
   .dev-settings { display: grid; gap: 18px; border-top: 1px solid var(--border); padding-top: 16px; }
   .upload-row { display: flex; gap: 8px; align-items: center; }
@@ -167,6 +181,9 @@
   .file-list li { font: 12.5px ui-monospace, Consolas, monospace; background: var(--surface-2); padding: 2px 8px; border-radius: 6px; }
   .file-list li.default { background: var(--ok-bg); color: var(--ok); }
   progress { width: 100%; height: 8px; margin-top: 6px; accent-color: var(--accent); }
+  .file-list li { display: inline-flex; align-items: center; gap: 4px; }
+  .file-del { appearance: none; border: 0; background: none; color: var(--bad); font: 700 15px/1 system-ui, sans-serif; cursor: pointer; padding: 0 2px; }
+  .file-del:hover { color: var(--text); }
   .ok-msg { color: var(--ok); font-size: 13px; font-weight: 600; margin: 6px 0 0; }
   .provider { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; margin-top: 8px; } .provider input { margin-top: 4px; }
   .api-key { margin: 8px 0 4px 26px; padding: 10px 12px; background: var(--surface-2); border-radius: 8px; }
@@ -231,13 +248,14 @@
     </div>
 
     <div class="card summary" id="summary" aria-live="polite"></div>
-    <p class="hint" id="hourly-status" hidden style="margin:-12px 0 16px"></p>
+    <p class="hint" id="poll-status" hidden style="margin:-12px 0 16px"></p>
     <p class="error" id="load-error" hidden></p>
     <div class="lizards" id="lizards"></div>
 
     <div class="add-row">
       <button class="add-btn" id="add-btn" type="button">+ Add lizard</button>
       <form class="card add-form" id="add-form" hidden novalidate>
+        <h3 class="full" id="form-title" style="margin:0">Add a lizard</h3>
         <div>
           <label for="f-name">Name</label>
           <input id="f-name" name="name" required maxlength="40" placeholder="e.g. Cheeto">
@@ -313,7 +331,7 @@
         <div class="full form-actions">
           <p class="error" id="add-error" hidden style="margin:0 auto 0 0"></p>
           <button class="btn" type="button" id="add-cancel">Cancel</button>
-          <button class="btn primary" type="submit">Create lizard</button>
+          <button class="btn primary" type="submit" id="form-submit">Create lizard</button>
         </div>
       </form>
     </div>
@@ -321,9 +339,18 @@
 
   <section id="view-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
     <div class="card settings">
-      <label class="check"><input type="checkbox" id="hourly-ai">
-        <span><strong>Hourly AI call</strong><br><span class="hint" style="margin:0">At the start of every hour, each lizard on the dashboard is analysed for the hour that just ended, with the AI provider in use. Runs while this page is open; with the dev clock sped up, hours (and calls) come faster. A real provider bills every call.</span></span>
-      </label>
+      <div>
+        <h2>AI polling</h2>
+        <div class="poll-row">
+          <label for="poll-interval" style="margin:0">Analyse each lizard</label>
+          <select id="poll-interval"></select>
+          <label for="poll-images" style="margin:0">with</label>
+          <select id="poll-images" title="How many camera images each analysis sends, spread evenly over the interval"></select>
+          <button class="btn primary" type="button" id="poll-toggle">Start</button>
+        </div>
+        <p class="hint" id="poll-state">Stopped.</p>
+        <p class="hint">At each interval mark of the dashboard clock, every lizard on the dashboard is analysed for the interval that just ended, with the AI provider in use. Runs while this page is open, and is stopped whenever the page loads. With the dev clock sped up, intervals (and calls) come faster. A real provider bills every call.</p>
+      </div>
       <label class="check"><input type="checkbox" id="dev-mode">
         <span><strong>Dev mode</strong><br><span class="hint" style="margin:0">Clock controls above the alerts (speed, set time, pause, resume), a prompt inspector on each lizard, Toy / Main data, and uploads.</span></span>
       </label>
@@ -382,7 +409,7 @@
 const STORE = { settings: "reptracker.settings.v2", clock: "reptracker.clock" };
 function loadStored(key, fallback) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } }
 function saveStored(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} }
-let settings = Object.assign({ devMode: false, mode: "toy", view: "full", hourlyAi: false }, loadStored(STORE.settings, {}));
+let settings = Object.assign({ devMode: false, mode: "toy", view: "full", pollMinutes: 60, pollImages: "" }, loadStored(STORE.settings, {}));
 function saveSettings() { saveStored(STORE.settings, settings); }
 // The data set on screen: Toy or Main in dev mode, always Main otherwise.
 const mode = () => settings.devMode ? settings.mode : "main";
@@ -401,7 +428,52 @@ function clockSpeed() { return !settings.devMode ? 1 : clock.paused ? 0 : clock.
 /* ================= Helpers ================= */
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// Markdown in AI answers: headings, paragraphs, bullet and numbered lists, code blocks, `code`, **bold**,
+// *italic*, and http(s) links. Everything is escaped first, so the answer can never inject HTML.
+function mdInline(text) {
+  const codes = [];
+  let s = esc(text).replace(/`([^`\n]+)`/g, (_, c) => `\u0000${codes.push(c) - 1}\u0000`);
+  s = s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+       .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>").replace(/__([^_\n]+)__/g, "<strong>$1</strong>")
+       .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\*)/g, "$1<em>$2</em>").replace(/(^|[^_\w])_([^_\n]+)_(?![_\w])/g, "$1<em>$2</em>");
+  return s.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${codes[i]}</code>`);
+}
+function renderMarkdown(text) {
+  const lines = String(text ?? "").replace(/\r\n?/g, "\n").split("\n"), out = [];
+  let para = [], list = null;
+  const flushPara = () => { if (para.length) out.push(`<p>${para.map(mdInline).join("<br>")}</p>`); para = []; };
+  const flushList = () => { if (list) out.push(`<${list.tag}>${list.items.map(i => `<li>${mdInline(i)}</li>`).join("")}</${list.tag}>`); list = null; };
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^\s*```/.test(line)) {                                     // fenced code block
+      flushPara(); flushList();
+      const code = [];
+      while (++i < lines.length && !/^\s*```/.test(lines[i])) code.push(lines[i]);
+      out.push(`<pre class="md-code"><code>${esc(code.join("\n"))}</code></pre>`);
+      continue;
+    }
+    let m;
+    if ((m = /^\s*(#{1,6})\s+(.*)$/.exec(line))) { flushPara(); flushList(); out.push(`<p class="md-h">${mdInline(m[2])}</p>`); continue; }
+    if ((m = /^\s*[-*•]\s+(.*)$/.exec(line)) || (m = /^\s*\d+[.)]\s+(.*)$/.exec(line))) {
+      const tag = /^\s*\d/.test(line) ? "ol" : "ul";
+      flushPara();
+      if (!list || list.tag !== tag) { flushList(); list = { tag, items: [] }; }
+      list.items.push(m[1]); continue;
+    }
+    if (!line.trim()) { flushPara(); flushList(); continue; }
+    if (list && /^\s{2,}\S/.test(line)) { list.items[list.items.length - 1] += " " + line.trim(); continue; }   // wrapped list item
+    flushList(); para.push(line);
+  }
+  flushPara(); flushList();
+  return out.join("");
+}
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR, WINDOW_MAX = 5 * DAY;
+// Ranges offered for prompts, in minutes; 6 h is the most one bundle allows (MAX_RANGE_MIN in main.py)
+// Images per bundle: "" = 1 per minute (all the range holds); otherwise that many, spread evenly (at least 1 min apart)
+const IMAGE_CHOICES = [["", "1 per minute"], ["5", "5 images"], ["10", "10 images"], ["15", "15 images"], ["30", "30 images"], ["60", "60 images"]];
+const imageOptions = selected => IMAGE_CHOICES.map(([v, label]) => `<option value="${v}" ${v === (selected || "") ? "selected" : ""}>${label}</option>`).join("");
+const RANGE_PRESETS = [[15, "Last 15 min"], [30, "Last 30 min"], [60, "Last hour"], [120, "Last 2 h"], [180, "Last 3 h"], [360, "Last 6 h"]];
 const fmtTime = ms => new Date(ms).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 const fmtShort = ms => new Date(ms).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 const toLocalInput = ms => { const d = new Date(ms - new Date(ms).getTimezoneOffset() * MIN); return d.toISOString().slice(0, 16); };
@@ -496,11 +568,12 @@ function renderSummary() {
 }
 
 /* ================= Lizard blocks ================= */
-function renderVideoBox(c) {
+function renderVideoBox(c, fullscreen = false) {
   return `<div class="video">
       <video src="/media/${mode()}/videos/${encodeURIComponent(c.camera.video)}.mp4" muted playsinline preload="auto" data-video></video>
       <span class="badge" data-cam-time></span><span class="badge r" title="Source: ${esc(c.camera.video)}.mp4">Source: ${esc(c.camera.video)}</span>
       <div class="cover" data-cover hidden></div>
+      ${fullscreen ? `<button class="video-fs" type="button" data-action="fullscreen" title="Full screen (Esc to exit)" aria-label="Show the video full screen">⛶</button>` : ""}
     </div>`;
 }
 
@@ -512,7 +585,7 @@ function renderCompactLizard(l) {
     <div class="compact-head">
       <button class="open" type="button" data-action="open" aria-expanded="false" title="Show ${esc(c.name)}'s details">${esc(c.name)}<span class="chev" aria-hidden="true">▸</span></button>
       <div class="compact-alerts">
-        ${alerts.length ? shown.map(a => `<span class="pill bad">${esc(a)}</span>`).join("") + (more > 0 ? `<span class="pill bad">+${more}</span>` : "")
+        ${alerts.length ? shown.map(a => `<span class="pill bad" title="${esc(a)}">${esc(a)}</span>`).join("") + (more > 0 ? `<span class="pill bad" title="${esc(alerts.slice(2).join("\n"))}">+${more}</span>` : "")
                         : `<span class="pill ${s}">${STATUS_LABEL[s]}</span>`}
       </div>
     </div>
@@ -551,10 +624,11 @@ function renderLizard(l) {
       <div><h3 style="display:inline;margin:0"><button class="lizard-name open" type="button" data-action="open" aria-expanded="true" title="Collapse ${esc(c.name)}">${esc(c.name)}<span class="chev" aria-hidden="true">▾</span></button></h3><span class="lizard-meta">${esc(c.species)} · ${esc(c.camera.view)} camera · ${c.enclosureWidthCm ? `${c.enclosureWidthCm} cm wide` : "position in % of video width"}</span></div>
       <div style="display:flex;gap:8px;align-items:center">
         <span class="pill ${s}">${STATUS_LABEL[s]}</span>
+        <button class="btn ghost" type="button" data-action="edit">Edit</button>
         <button class="btn ghost" type="button" data-action="remove">Remove</button>
       </div>
     </div>
-    ${renderVideoBox(c)}
+    ${renderVideoBox(c, true)}
     <div>
       <h2>Stats</h2>
       <dl class="stats">
@@ -566,14 +640,20 @@ function renderLizard(l) {
       </dl>
       <p class="hint">Temperature and humidity are live sensor readings; the rest is from the latest AI analysis.</p>
     </div>
-    <div class="panel analysis"><h2>AI analysis</h2>${renderAnalysis(l)}</div>
+    <div class="panel analysis"><h2>AI analysis</h2>${renderAnalysis(l)}
+      <form class="analyze-row" data-action="analyze">
+        <select name="range" aria-label="Range to analyse">${RANGE_PRESETS.map(([m, label]) => `<option value="${m}" ${m === 60 ? "selected" : ""}>${label}</option>`).join("")}</select>
+        <button class="btn primary" type="submit">Analyze</button>
+      </form>
+      <p class="hint" data-analyze-hint>Ends now, ${settings.pollImages ? `${settings.pollImages} images` : "1 image per minute"} (set under AI polling), with ${ai.provider ? `the ${esc(ai.provider)} provider` : "the AI provider in use"}.</p>
+      <p class="error" data-analyze-error hidden></p>
+    </div>
     <div class="panel ask">
       <h2>Ask a question</h2>
       <ul class="chat" data-chat></ul>
       <form data-action="ask">
         <input name="q" placeholder="e.g. Is ${esc(c.name)} warm enough?" autocomplete="off" required>
         <button class="btn primary" type="submit">Ask</button>
-        <label class="vision"><input type="checkbox" name="vision"> Use vision: send the current camera picture with the question</label>
       </form>
     </div>
     <div class="panel full">
@@ -594,9 +674,16 @@ function renderLizard(l) {
       <form class="range-row" data-action="generate">
         <div><label>Start</label><input type="datetime-local" step="60" name="start" value="${toLocalInput(def - HOUR)}" required></div>
         <div><label>End</label><input type="datetime-local" step="60" name="end" value="${toLocalInput(def)}" required></div>
+        <div style="flex:0 0 auto"><label>Range</label>
+          <select name="preset" data-range-preset title="Ends now and keeps following the clock; Custom keeps what you type">
+            ${RANGE_PRESETS.map(([min, label]) => `<option value="${min}" ${min === 60 ? "selected" : ""}>${label}</option>`).join("")}
+            <option value="custom">Custom</option>
+          </select></div>
+        <div style="flex:0 0 auto"><label>Images</label>
+          <select name="images" title="How many camera images to send, spread evenly over the range">${imageOptions(settings.pollImages)}</select></div>
         <button class="btn dev" type="submit">Generate prompts for time range</button>
       </form>
-      <p class="hint">1 image per minute; one PDF per 60 images. Ranges under 60 min give one shorter chunk; videos shorter than the range loop. Max 6 h.</p>
+      <p class="hint">Images: 1 per minute, or the number chosen, spread evenly (at least 1 min apart); one PDF per 60 images. Fewer images cost less but may miss movement. If the video is shorter than the range, only the last part that fits in one pass of the video is sent, so no image repeats. Max 6 h.</p>
       <p class="error" data-dev-error hidden></p>
       <div class="inspector" data-inspector></div>
     </div>` : ""}
@@ -619,7 +706,8 @@ function replaceLizard(updated) {
 }
 
 /* ================= Charts (inline SVG) ================= */
-function lineChart({ series, xMin, xMax, yMin, yMax, xFmt, yLabel, height = 170, yTicks, width = 520 }) {
+// series: [{name, color, points: [[x, y or null]], dashed?}]; markers: x values to tick along the bottom (e.g. "not visible")
+function lineChart({ series, xMin, xMax, yMin, yMax, xFmt, yLabel, height = 170, yTicks, width = 520, markers = [], markerTitle = "" }) {
   const W = width, H = height, L = 40, R = 10, T = 8, B = 24;
   if (yMax === yMin) { yMax += 1; yMin -= 1; }
   const sx = x => L + (x - xMin) / (xMax - xMin || 1) * (W - L - R);
@@ -631,11 +719,13 @@ function lineChart({ series, xMin, xMax, yMin, yMax, xFmt, yLabel, height = 170,
   for (const s of series) {
     let d = "", pen = false;
     for (const [x, y] of s.points) { if (y == null) { pen = false; continue; } d += `${pen ? "L" : "M"}${sx(x).toFixed(1)},${sy(y).toFixed(1)}`; pen = true; }
-    g += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"><title>${esc(s.name)}</title></path>`;
-    s.points.forEach(([x, y], i) => {
+    g += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${s.dashed ? 1.5 : 2}" stroke-linejoin="round"${s.dashed ? ' stroke-dasharray="4 4" opacity="0.6"' : ""}><title>${esc(s.name)}</title></path>`;
+    if (!s.dashed) s.points.forEach(([x, y], i) => {
       if (y != null && s.points[i - 1]?.[1] == null && s.points[i + 1]?.[1] == null) g += `<circle cx="${sx(x).toFixed(1)}" cy="${sy(y).toFixed(1)}" r="3" fill="${s.color}"/>`;
     });
   }
+  const base = sy(yMin);
+  for (const x of markers) g += `<line x1="${sx(x).toFixed(1)}" x2="${sx(x).toFixed(1)}" y1="${base - 7}" y2="${base}" stroke="var(--muted)" stroke-width="2"><title>${esc(markerTitle)}</title></line>`;
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(yLabel)}">${g}</svg>`;
 }
 
@@ -691,13 +781,25 @@ function renderPositionChart(l) {
   const seen = md.filter(m => (m.position ?? m.position_cm) != null).length;
   if (!seen) return `<p class="hint" style="margin:0">The latest analysis gave no position for any of its ${md.length} image${md.length === 1 ? "" : "s"}.</p>`;
   const W = ps.max;
+  const points = md.map((m, i) => [i, m.position ?? m.position_cm]);
+  // Images where the lizard was not visible (behind a hide, out of frame): a dashed line joins the positions
+  // seen before and after, and a tick on the bottom marks each hidden image. Nothing is invented in between.
+  const bridge = [], hidden = [];
+  let lastSeen = null;
+  points.forEach(([x, y]) => {
+    if (y == null) { hidden.push(x); return; }
+    if (lastSeen && x - lastSeen[0] > 1) bridge.push(lastSeen, [x, y], [x, null]);
+    lastSeen = [x, y];
+  });
   return lineChart({
-    series: [{ name: "position", color: "var(--line)", points: md.map((m, i) => [i, m.position ?? m.position_cm]) }],
+    series: [{ name: "not visible: joins the positions before and after", color: "var(--line)", points: bridge, dashed: true },
+             { name: "position", color: "var(--line)", points }],
+    markers: hidden, markerTitle: "Not visible in this image",
     xMin: 0, xMax: Math.max(1, md.length - 1), yMin: 0, yMax: W, width: 1040, height: 190,
     yTicks: [0, W / 4, W / 2, 3 * W / 4, W],
     xFmt: i => labelToLocal((md[Math.round(i)] || {}).time),
     yLabel: `Position, ${ps.unit}`
-  }) + `<p class="hint" style="margin:2px 0 0">${ps.unit} (0 = left, ${W} = right; hot side ${esc(l.config.sensors.hotSide)}) · one point per image, local time${seen < md.length ? ` · position given for ${seen} of ${md.length} images; gaps are images without one` : ""}</p>`;
+  }) + `<p class="hint" style="margin:2px 0 0">${ps.unit} (0 = left, ${W} = right; hot side ${esc(l.config.sensors.hotSide)}) · one point per image, local time${seen < md.length ? ` · seen in ${seen} of ${md.length} images. Dashed: not visible in between (behind decor or out of frame); ticks on the bottom mark those images` : ""}</p>`;
 }
 
 /* ================= Real-time loop: camera + sensors ================= */
@@ -726,8 +828,25 @@ function tick(forceCharts) {
       loadSeries(ch.series).then(s => { el.textContent = `${readSeries(s, offsetS).toFixed(1)} ${UNIT_LABEL[ch.unit]}`; }).catch(() => { el.textContent = "missing file"; });
     });
     if (drawCharts) renderSensorCharts(card, l, now);
+    followClockRange(card, now);
   }
 }
+// The dev panel's time range: a preset ("last N minutes", ending now on the dashboard clock) that keeps
+// following the clock, or Custom. Typing in Start or End switches to Custom; picking a preset follows again.
+function followClockRange(card, now) {
+  const form = card.querySelector("[data-action='generate']");
+  if (!form || form.preset.value === "custom") return;
+  const end = Math.floor(now / MIN) * MIN, endValue = toLocalInput(end), startValue = toLocalInput(end - +form.preset.value * MIN);
+  if (document.activeElement !== form.end && form.end.value !== endValue) form.end.value = endValue;
+  if (document.activeElement !== form.start && form.start.value !== startValue) form.start.value = startValue;
+}
+$("#lizards").addEventListener("input", e => {
+  const form = e.target.closest("[data-action='generate']");
+  if (form && (e.target === form.start || e.target === form.end)) form.preset.value = "custom";
+});
+$("#lizards").addEventListener("change", e => {
+  if (e.target.matches("[data-range-preset]")) followClockRange(e.target.closest(".lizard"), simNow());
+});
 // Keep the "camera" video at the moment that matches the clock; it loops like a live feed.
 function syncVideo(v, offsetS, speed) {
   const dur = v.duration;
@@ -801,6 +920,14 @@ $("#summary").addEventListener("click", e => {
 $("#lizards").addEventListener("click", async e => {
   const card = e.target.closest(".lizard"); if (!card) return;
   const id = card.dataset.id, l = lizards.find(x => x.id === id);
+  const fs = e.target.closest("[data-action='fullscreen']");
+  if (fs) {
+    const box = fs.closest(".video");
+    if (document.fullscreenElement) document.exitFullscreen();
+    else box.requestFullscreen?.().catch(() => {});
+    return;
+  }
+  if (e.target.closest("[data-action='edit']")) { openEdit(lizards.find(x => x.id === card.dataset.id)); return; }
   if (e.target.closest("[data-action='open']")) {
     toggleExpand(id);
     const card = document.getElementById(`lizard-${id}`);
@@ -811,7 +938,7 @@ $("#lizards").addEventListener("click", async e => {
   if (e.target.closest("[data-action='remove']")) {
     if (!confirm(`Remove ${l.config.name} from the dashboard? Its folder and data stay on disk.`)) return;
     await api("DELETE", `/lizards/${id}`);
-    lizards = lizards.filter(x => x.id !== id); renderLizards();
+    lizards = lizards.filter(x => x.id !== id); renderLizards(); renderSettings();
   }
   const send = e.target.closest("[data-action='send']");
   if (send) {
@@ -834,17 +961,31 @@ $("#lizards").addEventListener("click", async e => {
 $("#lizards").addEventListener("submit", async e => {
   e.preventDefault();
   const form = e.target, card = form.closest(".lizard"), id = card.dataset.id;
+  if (form.matches("[data-action='analyze']")) {
+    const btn = form.querySelector("button"), err = card.querySelector("[data-analyze-error]");
+    const minutes = +form.range.value, end = Math.floor(simNow() / MIN) * MIN, start = end - minutes * MIN;
+    err.hidden = true; btn.disabled = true; btn.textContent = realAi() ? "Analyzing with the AI…" : "Analyzing…";
+    try {
+      const m = await api("POST", `/lizards/${id}/prompts`, { start: new Date(start).toISOString(), end: new Date(end).toISOString(),
+                                                              images: settings.pollImages ? +settings.pollImages : null });
+      const entry = await api("POST", `/lizards/${id}/prompts/${m.bundleId}/send`);
+      const l = lizards.find(x => x.id === id);
+      if (l) replaceLizard({ ...l, latest: entry });
+      return;   // the card was redrawn with the new analysis
+    } catch (x) { err.textContent = x.message; err.hidden = false; }
+    btn.disabled = false; btn.textContent = "Analyze";
+    return;
+  }
   if (form.matches("[data-action='ask']")) {
     const q = form.q.value.trim(); if (!q) return;
-    const vision = form.vision.checked;
     const chat = card.querySelector("[data-chat]"), li = document.createElement("li");
-    li.innerHTML = `<div class="q">${esc(q)}${vision ? ' <span class="pill none">with picture</span>' : ""}</div><div class="a">${realAi() ? "Asking the AI…" : "…"}</div>`;
+    li.innerHTML = `<div class="q">${esc(q)}</div><div class="a">${realAi() ? "Asking the AI…" : "…"}</div>`;
     chat.appendChild(li); form.q.value = "";
     try {
-      const res = await api("POST", `/lizards/${id}/ask`, { question: q, now: new Date(simNow()).toISOString(), vision });
+      const res = await api("POST", `/lizards/${id}/ask`, { question: q, now: new Date(simNow()).toISOString(), vision: true });
       li.innerHTML = `<div class="q">${esc(q)}${res.image ? ' <span class="pill none">with picture</span>' : ""}</div>
         ${res.image ? `<img class="asked-picture" src="${res.image}" alt="Camera picture sent with the question">` : ""}
-        <div class="a">${esc(res.answer)}</div><details><summary>Prompt sent to ${esc(res.provider)}</summary><pre>${esc(res.prompt)}</pre></details>`;
+        <div class="a md">${renderMarkdown(res.answer)}</div><details><summary>Prompt sent to ${esc(res.provider)}</summary><pre>${esc(res.prompt)}</pre></details>`;
     } catch (x) { const a = li.querySelector(".a"); a.textContent = x.message; a.classList.add("err"); }
     chat.scrollTop = chat.scrollHeight;
   }
@@ -855,7 +996,8 @@ $("#lizards").addEventListener("submit", async e => {
     if (!(end > start)) { err.textContent = "End must be after start."; err.hidden = false; return; }
     btn.disabled = true; btn.textContent = "Generating…"; insp.innerHTML = `<p class="hint">Grabbing 1 image per minute and building PDFs…</p>`;
     try {
-      const m = await api("POST", `/lizards/${id}/prompts`, { start: new Date(start).toISOString(), end: new Date(end).toISOString() });
+      const m = await api("POST", `/lizards/${id}/prompts`, { start: new Date(start).toISOString(), end: new Date(end).toISOString(),
+                                                            images: form.images.value ? +form.images.value : null });
       await showBundle(card, id, m);
     } catch (x) { err.textContent = x.message; err.hidden = false; insp.innerHTML = ""; }
     btn.disabled = false; btn.textContent = "Generate prompts for time range";
@@ -887,7 +1029,27 @@ function fillMediaSelects() {
     : `Videos and sensor files come from ${mode()} mode's media${settings.devMode ? "; upload more in Settings" : ""}.`;
 }
 addForm.addEventListener("change", e => { if (e.target.matches("[data-media='sensors']")) guessUnit(e.target); });
-function closeAdd() { addForm.reset(); addErr.hidden = true; addForm.hidden = true; addBtn.hidden = false; $("#f-coldside").textContent = "Right"; }
+// The same form adds a lizard or edits one (editingId set). Editing keeps the lizard's id, start time and analyses.
+let editingId = null;
+function closeAdd() {
+  addForm.reset(); addErr.hidden = true; addForm.hidden = true; addBtn.hidden = false; $("#f-coldside").textContent = "Right";
+  editingId = null; $("#form-title").textContent = "Add a lizard"; $("#form-submit").textContent = "Create lizard";
+}
+function openEdit(l) {
+  const c = l.config, f = addForm.elements;
+  closeAdd(); fillMediaSelects();
+  editingId = l.id;
+  $("#form-title").textContent = `Edit ${c.name}`; $("#form-submit").textContent = "Save changes";
+  f.name.value = c.name; f.species.value = c.species; f.width.value = c.enclosureWidthCm ?? "";
+  f.view.value = c.camera.view; f.video.value = c.camera.video;
+  f.hotSide.value = c.sensors.hotSide; $("#f-coldside").textContent = c.sensors.hotSide === "left" ? "Right" : "Left";
+  for (const [key, side] of [["hot", "hot"], ["cold", "cold"]]) {
+    f[`${side}Temp`].value = c.sensors[key].temperature.series; f[`${side}TempUnit`].value = c.sensors[key].temperature.unit;
+    f[`${side}Hum`].value = c.sensors[key].humidity.series; f[`${side}HumUnit`].value = c.sensors[key].humidity.unit;
+  }
+  addBtn.hidden = true; addForm.hidden = false;
+  addForm.scrollIntoView({ behavior: "smooth", block: "start" }); f.name.focus({ preventScroll: true });
+}
 addBtn.addEventListener("click", () => { fillMediaSelects(); addBtn.hidden = true; addForm.hidden = false; addForm.elements.name.focus(); });
 $("#add-cancel").addEventListener("click", closeAdd);
 $("#f-hotside").addEventListener("change", e => $("#f-coldside").textContent = e.target.value === "left" ? "Right" : "Left");
@@ -897,7 +1059,7 @@ addForm.addEventListener("submit", async e => {
   const body = {
     name: f.name.value.trim(), species: f.species.value,
     enclosureWidthCm: f.width.value.trim() === "" ? null : +f.width.value,
-    createdAt: new Date(simNow()).toISOString(),
+    createdAt: new Date(simNow()).toISOString(),   // ignored when editing: the lizard keeps its start time
     camera: { view: f.view.value, video: f.video.value },
     sensors: {
       hotSide: f.hotSide.value,
@@ -906,8 +1068,16 @@ addForm.addEventListener("submit", async e => {
     }
   };
   try {
+    if (editingId) {
+      const updated = await api("PUT", `/lizards/${editingId}`, body);
+      closeAdd();
+      lizards = lizards.map(l => l.id === updated.id ? updated : l);
+      renderLizards(); renderSettings();
+      document.getElementById(`lizard-${updated.id}`).scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
     const created = await api("POST", "/lizards", body);
-    lizards.push(created); closeAdd(); renderLizards();
+    lizards.push(created); closeAdd(); renderLizards(); renderSettings();
     document.getElementById(`lizard-${created.id}`).scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (x) { addErr.textContent = x.message; addErr.hidden = false; }
 });
@@ -954,6 +1124,9 @@ function renderApiKey(p) {
         ${k.saved ? `<button class="btn" type="button" data-key-remove>Remove</button>` : ""}
       </div>
       <p class="hint">Kept only on the computer running app.py (data/claude-key.json, git-ignored) and never shown here again. Get one in the Claude Console, under API keys.</p>
+      ${p.models ? `<label for="claude-model" style="margin-top:10px">Model</label>
+      <select id="claude-model" data-claude-model>${p.models.map(m => `<option value="${esc(m.id)}" ${m.id === p.model ? "selected" : ""}>${esc(m.label)} · ${esc(m.price)}</option>`).join("")}</select>
+      <p class="hint">${esc((p.models.find(m => m.id === p.model) || {}).note || "")} Used for analyses and questions.</p>` : ""}
     </form>`;
 }
 $("#ai-providers").addEventListener("submit", async e => {
@@ -964,6 +1137,12 @@ $("#ai-providers").addEventListener("submit", async e => {
   aiMessage();
   try { ai = await aiApi("POST", "/claude-key", { key }); renderAi(); aiMessage("ok", "API key saved. Select Claude, then use Test connection to check it."); }
   catch (x) { aiMessage("error", x.message); }
+});
+$("#ai-providers").addEventListener("change", async e => {
+  if (!e.target.matches("[data-claude-model]")) return;
+  aiMessage();
+  try { ai = await aiApi("POST", "/claude-model", { model: e.target.value }); renderAi(); aiMessage("ok", `Claude will use ${e.target.selectedOptions[0].text.split(" · ")[0]}.`); }
+  catch (x) { await loadAi(); aiMessage("error", x.message); }
 });
 $("#ai-providers").addEventListener("click", async e => {
   const toggle = e.target.closest("[data-key-toggle]");
@@ -1003,59 +1182,89 @@ $("#ai-test").addEventListener("click", async e => {
 
 /* Settings: dev mode, toy/main, uploads (all apply immediately) */
 function renderSettings() {
-  $("#hourly-ai").checked = settings.hourlyAi;
   $("#dev-mode").checked = settings.devMode;
   $("#dev-settings").hidden = !settings.devMode;
   document.querySelectorAll("#mode-toggle button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === settings.mode));
   document.querySelectorAll("[data-mode-name]").forEach(el => el.textContent = `· ${mode()} mode`);
   for (const kind of ["videos", "sensors"]) {
-    const list = media[kind], defaults = media.defaultSensors || [];
+    const list = media[kind], defaults = media.defaultSensors || [], samples = media.sampleVideos || [];
+    const inUse = n => lizards.filter(l => l.config.camera.video === n).map(l => l.config.name);
     $(`[data-file-list="${kind}"]`).innerHTML = list.length
-      ? list.map(n => defaults.includes(n) && kind === "sensors" ? `<li class="default" title="Built-in default, available in every mode">${esc(n)} · default</li>` : `<li>${esc(n)}</li>`).join("")
+      ? list.map(n => {
+          if (kind === "sensors") return defaults.includes(n) ? `<li class="default" title="Built-in default, available in every mode">${esc(n)} · default</li>` : `<li>${esc(n)}</li>`;
+          if (samples.includes(n)) return `<li class="default" title="Sample video that comes with the app">${esc(n)} · sample</li>`;
+          const users = inUse(n);
+          return `<li>${esc(n)}${users.length ? ` <span class="hint" style="margin:0">· camera of ${esc(users.join(", "))}</span>` : ""}
+            <button class="file-del" type="button" data-delete-video="${esc(n)}" title="Delete ${esc(n)}.mp4 from this computer" aria-label="Delete ${esc(n)}">×</button></li>`;
+        }).join("")
       : `<li style="background:none;padding:0;font-family:inherit" class="hint">None yet</li>`;
   }
 }
-/* Hourly AI call: at each hour mark of the dashboard clock, analyse the hour that just ended for every lizard.
-   Each lizard has at most one call in flight; if hours pass while it is busy (a fast dev clock), only the
-   latest finished hour is analysed, never a backlog. Turning it on or reloading waits for the next hour mark. */
-const hourly = { last: {}, busy: new Set() };
-function hourlyStatus(text, isError) {
-  const el = $("#hourly-status");
-  el.hidden = !settings.hourlyAi;
-  if (text != null) { el.textContent = text; el.style.color = isError ? "var(--bad)" : ""; }
+/* AI polling: every N minutes of the dashboard clock, analyse the interval that just ended for every lizard.
+   The interval is remembered; running is not: polling is stopped when the page loads and runs only after Start.
+   Each lizard has at most one call in flight; intervals that pass while it is busy (a fast dev clock) are
+   skipped, never queued. Start waits for the next interval mark. */
+const polling = { running: false, last: {}, busy: new Set() };
+const pollMs = () => settings.pollMinutes * MIN;
+const fmtClock = ms => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const pollLabel = () => ((RANGE_PRESETS.find(([m]) => m === settings.pollMinutes) || [0, `${settings.pollMinutes} min`])[1]).replace("Last ", "every ");
+const nextMark = () => (Math.floor(simNow() / pollMs()) + 1) * pollMs();
+function pollStatus(text, isError) {
+  const el = $("#poll-status");
+  el.hidden = !text;
+  if (text) { el.textContent = text; el.style.color = isError ? "var(--bad)" : ""; }
 }
-function hourlyTick() {
-  if (!settings.hourlyAi) return;
-  const hour = Math.floor(simNow() / HOUR);
+function renderPolling() {
+  $("#poll-interval").value = String(settings.pollMinutes);
+  $("#poll-images").value = settings.pollImages || "";
+  $("#poll-toggle").textContent = polling.running ? "Stop" : "Start";
+  $("#poll-toggle").className = polling.running ? "btn" : "btn primary";
+  $("#poll-state").textContent = polling.running
+    ? `Running, ${pollLabel()}, ${settings.pollImages ? `${settings.pollImages} images` : "1 image per minute"} each. Next at ${fmtClock(nextMark())} (dashboard clock).` : "Stopped.";
+}
+function pollTick() {
+  if (!polling.running) return;
+  const slot = Math.floor(simNow() / pollMs());
   for (const l of lizards) {
     const key = `${mode()}/${l.id}`;
-    if (hourly.last[key] === undefined || hour < hourly.last[key]) { hourly.last[key] = hour; continue; }
-    if (hour > hourly.last[key] && !hourly.busy.has(key)) { hourly.last[key] = hour; runHourly(l, hour, key); }
+    if (polling.last[key] === undefined || slot < polling.last[key]) { polling.last[key] = slot; continue; }
+    if (slot > polling.last[key] && !polling.busy.has(key)) { polling.last[key] = slot; runPoll(l, slot, key); }
   }
 }
-async function runHourly(l, hour, key) {
-  const end = hour * HOUR, start = end - HOUR;
+async function runPoll(l, slot, key) {
+  const period = pollMs(), end = slot * period, start = end - period;
   if (end <= Date.parse(l.config.createdAt)) return;          // camera not started yet
-  const span = `${fmtShort(start)}–${new Date(end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+  const span = `${fmtShort(start)}–${fmtClock(end)}`;
   const runMode = mode();
-  hourly.busy.add(key);
-  hourlyStatus(`Hourly AI: analysing ${l.config.name}, ${span}…`);
+  polling.busy.add(key);
+  pollStatus(`AI polling: analysing ${l.config.name}, ${span}…`);
   try {
-    const m = await api("POST", `/lizards/${l.id}/prompts`, { start: new Date(start).toISOString(), end: new Date(end).toISOString() });
+    const m = await api("POST", `/lizards/${l.id}/prompts`, { start: new Date(start).toISOString(), end: new Date(end).toISOString(),
+                                                            images: settings.pollImages ? +settings.pollImages : null });
     const entry = await api("POST", `/lizards/${l.id}/prompts/${m.bundleId}/send`);
     const current = mode() === runMode && lizards.find(x => x.id === l.id);
     if (current) replaceLizard({ ...current, latest: entry });
-    hourlyStatus(`Hourly AI: ${l.config.name} analysed for ${span} (${entry.provider}). Next at ${new Date(end + HOUR).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`);
+    pollStatus(polling.running ? `AI polling: ${l.config.name} analysed for ${span} (${entry.provider}). Next at ${fmtClock(end + period)}.`
+                               : `AI polling stopped. Last: ${l.config.name}, ${span} (${entry.provider}).`);
   } catch (x) {
-    hourlyStatus(`Hourly AI: ${l.config.name}, ${span} failed: ${x.message}`, true);
-  } finally { hourly.busy.delete(key); }
+    pollStatus(`AI polling: ${l.config.name}, ${span} failed: ${x.message}`, true);
+  } finally { polling.busy.delete(key); }
 }
-setInterval(hourlyTick, 1000);
-$("#hourly-ai").addEventListener("change", e => {
-  settings.hourlyAi = e.target.checked; saveSettings();
-  hourly.last = {};
-  const next = new Date((Math.floor(simNow() / HOUR) + 1) * HOUR).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  hourlyStatus(settings.hourlyAi ? `Hourly AI is on. First analysis at ${next} (dashboard clock).` : "");
+$("#poll-images").innerHTML = imageOptions(settings.pollImages);
+$("#poll-images").addEventListener("change", e => { settings.pollImages = e.target.value; saveSettings(); renderPolling(); });
+$("#poll-interval").innerHTML = RANGE_PRESETS.map(([m, label]) => `<option value="${m}">${label.replace("Last ", "Every ")}</option>`).join("");
+if (!RANGE_PRESETS.some(([m]) => m === settings.pollMinutes)) settings.pollMinutes = 60;
+setInterval(pollTick, 1000);
+setInterval(() => { if (polling.running) renderPolling(); }, 5000);   // keep "Next at" current while the clock moves
+function setPolling(running) {
+  polling.running = running; polling.last = {};
+  renderPolling();
+  pollStatus(running ? `AI polling started, ${pollLabel()}. First analysis at ${fmtClock(nextMark())} (dashboard clock).` : "");
+}
+$("#poll-toggle").addEventListener("click", () => setPolling(!polling.running));
+$("#poll-interval").addEventListener("change", e => {
+  settings.pollMinutes = +e.target.value; saveSettings();
+  if (polling.running) setPolling(true); else renderPolling();   // a new interval counts from its next mark
 });
 
 $("#dev-mode").addEventListener("change", e => {
@@ -1116,6 +1325,19 @@ function uploadWithProgress(url, file, onProgress) {
   });
 }
 
+document.querySelector('[data-file-list="videos"]').addEventListener("click", async e => {
+  const btn = e.target.closest("[data-delete-video]"); if (!btn) return;
+  const name = btn.dataset.deleteVideo, wrap = btn.closest("div");
+  const err = wrap.querySelector("[data-upload-error]"), ok = wrap.querySelector("[data-upload-ok]");
+  err.hidden = ok.hidden = true;
+  if (!confirm(`Permanently delete the camera video "${name}.mp4" from this computer (${mode()} mode)? This can't be undone.`)) return;
+  try {
+    media = await readResponse(await fetch(`/api/${mode()}/media/videos/${encodeURIComponent(name)}`, { method: "DELETE" }));
+    ok.textContent = `Deleted "${name}".`; ok.hidden = false;
+    renderSettings(); if (!addForm.hidden) fillMediaSelects();
+  } catch (x) { err.textContent = x.message; err.hidden = false; }
+});
+
 /* Load the current mode's media and lizards */
 async function loadMode() {
   $("#load-error").hidden = true;
@@ -1128,10 +1350,8 @@ async function loadMode() {
     $("#load-error").hidden = false;
   }
   expanded.clear();
-  hourly.last = {};     // new set of lizards: wait for the next hour mark
-  renderDevBar(); renderSettings(); renderLizards();
-  if (settings.hourlyAi && $("#hourly-status").hidden)
-    hourlyStatus(`Hourly AI is on. Next analysis at ${new Date((Math.floor(simNow() / HOUR) + 1) * HOUR).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} (dashboard clock).`);
+  polling.last = {};     // new set of lizards: wait for the next interval mark
+  renderDevBar(); renderSettings(); renderLizards(); renderPolling();
 }
 loadMode();
 loadAi();

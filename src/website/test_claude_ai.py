@@ -67,6 +67,8 @@ class ClaudeTestCase(unittest.TestCase):
         self.keyFile = Path(self.tmp.name) / "data" / "claude-key.json"
         patcher = mock.patch.object(claude_ai, "KEY_FILE", self.keyFile)
         patcher.start(); self.addCleanup(patcher.stop)
+        modelPatcher = mock.patch.object(claude_ai, "MODEL_FILE", Path(self.tmp.name) / "data" / "claude-settings.json")
+        modelPatcher.start(); self.addCleanup(modelPatcher.stop)
         env = mock.patch.dict(os.environ, {}, clear=False)
         env.start(); self.addCleanup(env.stop)
         os.environ.pop("ANTHROPIC_API_KEY", None)
@@ -126,6 +128,22 @@ class RequestTest(ClaudeTestCase):
         os.environ["REPTRACKER_CLAUDE_MODEL"] = "claude-sonnet-5-5"
         request = claude_ai.BuildAnalysisRequest(Path(self.tmp.name), MakeBundle(self.tmp.name), SCHEMA)
         self.assertEqual(request["model"], "claude-sonnet-5-5")
+
+    def test_cheapest_model_is_sent_without_the_refusal_fallback(self):
+        claude_ai.SetModel("claude-haiku-5-5")
+        request = claude_ai.BuildAnalysisRequest(Path(self.tmp.name), MakeBundle(self.tmp.name), SCHEMA)
+        self.assertEqual(request["model"], "claude-haiku-5-5")
+        self.assertNotIn("fallbacks", request)
+        self.assertNotIn("betas", request)
+
+    def test_saved_model_wins_over_environment_and_bad_choice_is_refused(self):
+        os.environ["REPTRACKER_CLAUDE_MODEL"] = "claude-opus-5-5"
+        claude_ai.SetModel("claude-sonnet-5-5")
+        self.assertEqual(claude_ai.Settings()["model"], "claude-sonnet-5-5")
+        self.assertEqual(claude_ai.Status()["model"], "claude-sonnet-5-5")
+        with self.assertRaises(AiError):
+            claude_ai.SetModel("gpt-5")
+        self.assertEqual(claude_ai.Settings()["model"], "claude-sonnet-5-5")
 
     def test_page_count(self):
         MakeBundle(self.tmp.name, pages=3)

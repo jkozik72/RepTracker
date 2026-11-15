@@ -114,6 +114,9 @@ def DefaultSensorNames():
     return sorted(p.stem for p in DEFAULT_SENSORS.glob("*.json"))
 
 
+SAMPLE_VIDEOS = {"toy": {"gecko-top", "skink-side", "short-clip-top"}}   # committed samples (tools/make_samples.py)
+
+
 def ListMedia(mode):
     """Names (without extension) of the videos and sensor series available in this mode.
 
@@ -124,7 +127,29 @@ def ListMedia(mode):
         "videos": sorted(p.stem for p in VideosDir(mode).glob("*.mp4")),
         "sensors": sorted(set(defaults) | {p.stem for p in SensorsDir(mode).glob("*.json")}),
         "defaultSensors": defaults,
+        "sampleVideos": sorted(SAMPLE_VIDEOS.get(mode, set())),
     }
+
+
+def DeleteVideo(mode, name):
+    """Delete an uploaded camera video from this mode's media folder, for good.
+
+    Refused for the committed sample videos, and for a video a lizard on the dashboard still uses.
+    """
+    if not re.fullmatch(r"[a-z0-9-]+", name or ""):
+        raise RepTrackerError("Unknown video.")
+    path = VideosDir(mode) / f"{name}.mp4"
+    if not path.exists():
+        raise RepTrackerError(f"There is no video '{name}' in {mode} mode.")
+    if name in SAMPLE_VIDEOS.get(mode, set()):
+        raise RepTrackerError(f"'{name}' is a sample video that comes with the app; it can't be deleted.")
+    users = [l["config"]["name"] for l in ListLizards(mode) if l["config"]["camera"]["video"] == name]
+    if users:
+        raise RepTrackerError(f"'{name}' is the camera of {', '.join(users)}. Remove "
+                              f"{'that lizard' if len(users) == 1 else 'those lizards'} first, then delete the video.")
+    path.unlink()
+    VideoDurationSeconds.cache_clear()
+    return ListMedia(mode)
 
 
 def SensorPath(mode, name):
@@ -230,8 +255,8 @@ def _Choice(value, options, field):
     return value
 
 
-def CreateNewLizard(mode, formData):
-    """Validate the add-lizard form, write reptiles/<id>/config.json, and add it to reptiles.json."""
+def LizardConfigFromForm(mode, formData, createdAt):
+    """Validate the add/edit-lizard form; returns the config to save. createdAt is kept as given."""
     media = ListMedia(mode)
     name = str(formData.get("name", "")).strip()
     if not name or len(name) > 40:
@@ -260,8 +285,7 @@ def CreateNewLizard(mode, formData):
                          "unit": _Choice(h.get("unit"), HUMIDITY_UNITS, f"{label} humidity unit")},
         }
 
-    createdAt = FormatTime(ParseTime(formData.get("createdAt") or FormatTime(datetime.now(timezone.utc))))
-    config = {
+    return {
         "name": name,
         "species": _Choice(formData.get("species"), SPECIES, "Species"),
         "enclosureWidthCm": width,
@@ -277,6 +301,12 @@ def CreateNewLizard(mode, formData):
         },
     }
 
+
+def CreateNewLizard(mode, formData):
+    """Validate the add-lizard form, write reptiles/<id>/config.json, and add it to reptiles.json."""
+    createdAt = FormatTime(ParseTime(formData.get("createdAt") or FormatTime(datetime.now(timezone.utc))))
+    config = LizardConfigFromForm(mode, formData, createdAt)
+    name = config["name"]
     base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "lizard"
     lizardId, n = base, 2
     while (ReptilesDir(mode) / lizardId).exists():
@@ -286,6 +316,21 @@ def CreateNewLizard(mode, formData):
     index.append({"name": name, "folder path": f"reptiles/{lizardId}"})
     WriteJson(IndexPath(mode), index)
     return {"id": lizardId, "config": config, "latest": None}
+
+
+def UpdateLizard(mode, lizardId, formData):
+    """Change a lizard's settings (name, species, width, camera, sensors). Its id, start time
+    (createdAt) and saved analyses stay, so the camera and sensors keep their place in time."""
+    old = LoadConfig(mode, lizardId)
+    config = LizardConfigFromForm(mode, formData, old["createdAt"])
+    WriteJson(LizardFolder(mode, lizardId) / "config.json", config)
+    index = ReadJson(IndexPath(mode), [])
+    for entry in index:
+        if Path(entry["folder path"]).name == lizardId:
+            entry["name"] = config["name"]
+    WriteJson(IndexPath(mode), index)
+    analyses = ReadJson(LizardFolder(mode, lizardId) / "analyses.json", [])
+    return {"id": lizardId, "config": config, "latest": analyses[-1] if analyses else None}
 
 
 def RemoveLizard(mode, lizardId):
@@ -418,10 +463,11 @@ def LabelTime(t):
     return t.strftime("%Y-%m-%d %H:%M UTC")
 
 
-def GeneratePrompts(mode, lizardId, startIso, endIso):
+def GeneratePrompts(mode, lizardId, startIso, endIso, imageCount=None):
     """Build every prompt for one lizard over a time range and write them to a bundle folder.
 
-    One image per minute from the start. Ranges under 60 min give one shorter IMAGES chunk.
+    imageCount images are spread evenly over the range, at least 1 min apart (so every image has its
+    own minute label); None means 1 per minute. Fewer than 60 images give one shorter IMAGES chunk.
     No video moment is sent twice: when the range is longer than the video (the live camera
     loops), only the last part of the range that fits in one pass of the video is analysed.
     """
@@ -439,15 +485,27 @@ def GeneratePrompts(mode, lizardId, startIso, endIso):
 
     video = config["camera"]["video"]
     duration = VideoDurationSeconds(mode, video)
-    # Images are 1 min apart, so at most duration/60 of them before the looping video repeats itself.
-    requestedMinutes, maxImages = minutes, max(1, int(duration // 60))
-    count = max(1, math.ceil(minutes))
-    trimmed = count > maxImages
+    # One pass of the looping video at most, so no video moment is sent twice.
+    requestedMinutes = minutes
+    trimmed = minutes * 60 > duration
     if trimmed:
-        count = maxImages
-        start = end - timedelta(minutes=count)
-        minutes = count
-    imageTimes = [start + timedelta(minutes=i) for i in range(count)]
+        minutes = max(1, int(duration // 60))
+        start = end - timedelta(minutes=minutes)
+    perMinute = max(1, math.ceil(minutes))                    # the most images the range can hold, 1 min apart
+    if imageCount is None:
+        count = perMinute
+    else:
+        try:
+            count = int(imageCount)
+        except (TypeError, ValueError):
+            raise RepTrackerError("Images: a whole number, at least 1.")
+        if count < 1:
+            raise RepTrackerError("Images: a whole number, at least 1.")
+    capped = count > perMinute
+    count = min(count, perMinute)
+    spacing = (end - start) / count if count < perMinute else timedelta(minutes=1)
+    imageTimes = [start + spacing * i for i in range(count)]
+    spacingMin = spacing.total_seconds() / 60
     hotSide = config["sensors"]["hotSide"]
     common = {
         "name": config["name"], "species": config["species"],
@@ -494,6 +552,7 @@ def GeneratePrompts(mode, lizardId, startIso, endIso):
         text = f"images-{n:02d}.txt"
         (folder / text).write_text(FillTemplate("images-chunk.txt", {
             **common, "chunk_index": n, "chunk_count": len(groups), "image_count": len(group),
+            "image_spacing": "one per minute" if spacingMin <= 1.001 else f"one every {spacingMin:.0f} min" if spacingMin >= 2 else f"one every {spacingMin:.1f} min",
             "first_time": labels[0], "last_time": labels[-1],
         }), encoding="utf-8")
         chunks.append({"type": "images", "text": text, "pdf": pdf, "frames": frames})
@@ -501,14 +560,17 @@ def GeneratePrompts(mode, lizardId, startIso, endIso):
     notes = []
     if trimmed:
         notes.append(f"Video '{video}' is {duration / 60:.1f} min, shorter than the {requestedMinutes:.0f}-min range, and it loops. "
-                     f"So no moment is sent twice, only the last {count} min ({LabelTime(start)} to {LabelTime(end)}) "
-                     f"were analysed: {count} image(s).")
-    elif minutes < 60:
-        notes.append(f"Range is {minutes:.0f} min (< 60): one IMAGES chunk with {len(imageTimes)} image(s).")
+                     f"So no moment is sent twice, only the last {minutes:.0f} min ({LabelTime(start)} to {LabelTime(end)}) were analysed.")
+    if capped:
+        notes.append(f"{imageCount} images were asked for, but images are at least 1 min apart, so this {minutes:.0f}-min range holds {count}.")
+    if count < perMinute:
+        notes.append(f"{count} images spread over {minutes:.0f} min: one every {spacingMin:.1f} min.")
+    elif count < 60:
+        notes.append(f"{count} image(s), one per minute: one IMAGES chunk.")
     manifest = {
         "mode": mode, "lizardId": lizardId, "bundleId": bundleId,
         "range": {"start": FormatTime(start), "end": FormatTime(end)},
-        "imageCount": len(imageTimes), "system": "system.txt", "schema": "response-schema.json",
+        "imageCount": len(imageTimes), "imageSpacingS": round(spacing.total_seconds()), "system": "system.txt", "schema": "response-schema.json",
         "chunks": chunks, "notes": notes,
     }
     WriteJson(folder / "manifest.json", manifest)
@@ -629,7 +691,8 @@ def AiStatus():
             {"name": "mock", "label": PROVIDER_LABELS["mock"], "ready": True,
              "detail": "Runs on this computer. Estimates position from dark pixels; every other field is a placeholder."},
             {"name": "claude", "label": PROVIDER_LABELS["claude"], "ready": claude["ready"], "detail": claude["detail"],
-             "apiKey": {"saved": claude["keySaved"], "mask": claude["keyMask"]}},   # never the key itself
+             "apiKey": {"saved": claude["keySaved"], "mask": claude["keyMask"]},   # never the key itself
+             "model": claude["model"], "models": claude["models"]},
             {"name": "gemini", "label": PROVIDER_LABELS["gemini"], "ready": gemini["ready"], "detail": gemini["detail"]},
         ],
     }
@@ -638,6 +701,12 @@ def AiStatus():
 def SaveClaudeKey(key):
     """Save the Anthropic API key on this computer (data/claude-key.json, git-ignored)."""
     _CallAi(claude_ai.SaveKey, key)
+    return AiStatus()
+
+
+def SetClaudeModel(model):
+    """Choose which Claude model analyses and questions use on this computer."""
+    _CallAi(claude_ai.SetModel, model)
     return AiStatus()
 
 
@@ -713,7 +782,8 @@ def AskQuestion(mode, lizardId, question, nowIso, vision=False):
     latest = analyses[-1] if analyses else None
     now = ParseTime(nowIso)
     sensorsNow = SensorsNow(mode, config, now)
-    image = CurrentPicture(mode, config, now) if vision else None
+    # No picture before the lizard's camera starts: the question is asked without one.
+    image = CurrentPicture(mode, config, now) if vision and SourceOffsetSeconds(config, now) is not None else None
     prompt = FillTemplate("ask.txt", {
         "image_note": (f"A picture from the camera at {LabelTime(now)} is attached. Use it to answer." if image
                        else "No picture is attached."),

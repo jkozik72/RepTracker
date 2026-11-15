@@ -8,12 +8,13 @@ The API key comes from, in order:
     1. the key saved in Settings (dev mode), kept in data/claude-key.json (git-ignored, never sent to the page)
     2. the ANTHROPIC_API_KEY environment variable
 
-Optional environment variable:
-    REPTRACKER_CLAUDE_MODEL   default "claude-opus-5-5"
+The model is chosen in Settings (dev mode) from MODELS and kept in data/claude-settings.json
+(git-ignored); without a choice, REPTRACKER_CLAUDE_MODEL, else "claude-opus-5-5".
 
 One analysis is one request (max_retries=0), like the Gemini provider. Refusals are handled on
 Anthropic's side by the server-side fallback ("fallbacks": "default"), which re-runs a declined
-request on another Claude model inside the same call.
+request on another Claude model inside the same call. Claude Haiku 5.5 has no server-side
+fallback, so it is sent without one: a refusal there simply fails and nothing is saved.
 
 The anthropic package is imported only when Claude is used. To check the key from a terminal:
     python claude_ai.py
@@ -32,6 +33,16 @@ from pathlib import Path
 from ai import AiError, FrameLabels, NormalizeResult, ParseJson
 
 DEFAULT_MODEL = "claude-opus-5-5"
+# The models offered in Settings, most capable first. Prices: Anthropic API list prices per million tokens.
+MODELS = [
+    {"id": "claude-opus-5-5", "label": "Claude Opus 5.5", "price": "$4 in / $20 out per million tokens",
+     "note": "Most capable; the default.", "fallback": True},
+    {"id": "claude-sonnet-5-5", "label": "Claude Sonnet 5.5", "price": "$2 in / $10 out per million tokens",
+     "note": "Half the price of Opus.", "fallback": True},
+    {"id": "claude-haiku-5-5", "label": "Claude Haiku 5.5", "price": "$0.10 in / $0.50 out per million tokens "
+     "(prompts over 100K tokens: $0.50 / $2.50)", "note": "Cheapest. No refusal fallback.", "fallback": False},
+]
+FALLBACK_MODELS = {m["id"] for m in MODELS if m["fallback"]}
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 MAX_REQUEST_MB = 30          # the Messages API takes 32 MB per request; PDFs travel as base64
 MAX_PDF_PAGES = 600          # pages across all PDFs in one request
@@ -41,6 +52,7 @@ ANALYSIS_MAX_TOKENS = 16000
 ANSWER_MAX_TOKENS = 4000
 MAX_ANSWER_CHARS = 4000
 KEY_FILE = Path(__file__).resolve().parent / "data" / "claude-key.json"
+MODEL_FILE = Path(__file__).resolve().parent / "data" / "claude-settings.json"
 
 log = logging.getLogger("reptracker.claude")
 _lock = threading.RLock()
@@ -86,8 +98,25 @@ def MaskKey(key):
     return f"{key[:7]}…{key[-4:]}" if len(key) > 14 else "…"
 
 
+def _SavedModel():
+    try:
+        model = json.loads(MODEL_FILE.read_text(encoding="utf-8")).get("model")
+    except (FileNotFoundError, json.JSONDecodeError, AttributeError):
+        return ""
+    return model if model in {m["id"] for m in MODELS} else ""
+
+
 def Settings():
-    return {"model": os.environ.get("REPTRACKER_CLAUDE_MODEL") or DEFAULT_MODEL}
+    """The model to use: the one chosen in Settings, else REPTRACKER_CLAUDE_MODEL, else the default."""
+    return {"model": _SavedModel() or os.environ.get("REPTRACKER_CLAUDE_MODEL") or DEFAULT_MODEL}
+
+
+def SetModel(model):
+    """Choose the Claude model for this computer (data/claude-settings.json, git-ignored)."""
+    if model not in {m["id"] for m in MODELS}:
+        raise AiError(f"Unknown Claude model. Choose one of: {', '.join(m['id'] for m in MODELS)}.")
+    MODEL_FILE.parent.mkdir(parents=True, exist_ok=True)
+    MODEL_FILE.write_text(json.dumps({"model": model}), encoding="utf-8")
 
 
 def _HasLibrary():
@@ -101,7 +130,8 @@ def Status():
     """Whether Claude is set up on this computer, checked without calling it: {"ready", "detail", "keySaved", "keyMask"}."""
     key, source = ApiKey()
     saved = bool(_SavedKey())
-    base = {"keySaved": saved, "keyMask": MaskKey(key) if key else ""}
+    base = {"keySaved": saved, "keyMask": MaskKey(key) if key else "", "model": Settings()["model"],
+            "models": [{k: m[k] for k in ("id", "label", "price", "note")} for m in MODELS]}
     if not _HasLibrary():
         return {**base, "ready": False,
                 "detail": 'Claude needs the anthropic package. In src/website run "pip install -r requirements.txt", then restart app.py.'}
@@ -165,7 +195,7 @@ def Explain(err, timeoutS=ANALYSIS_TIMEOUT_S):
     if _Is(err, "PermissionDeniedError"):
         return AiError(f"This API key may not use model {model} (error 403).{claudeSaid}")
     if _Is(err, "NotFoundError"):
-        return AiError(f"Model '{model}' was not found (error 404). Check REPTRACKER_CLAUDE_MODEL.")
+        return AiError(f"Model '{model}' was not found (error 404). Choose another model in Settings.")
     if _Is(err, "RequestTooLargeError"):
         return AiError("Anthropic says the request is too large (error 413). Generate prompts for a shorter time range.")
     if _Is(err, "RateLimitError"):
@@ -219,8 +249,12 @@ def StructuredSchema(schema):
 
 
 def _Common(timeoutS, maxTokens):
-    return {"model": Settings()["model"], "max_tokens": maxTokens, "betas": [FALLBACK_BETA],
-            "fallbacks": "default", "timeout": timeoutS}
+    """What every request shares. The refusal fallback is sent only to models that accept it."""
+    model = Settings()["model"]
+    common = {"model": model, "max_tokens": maxTokens, "timeout": timeoutS}
+    if model in FALLBACK_MODELS:
+        common.update(betas=[FALLBACK_BETA], fallbacks="default")
+    return common
 
 
 def BuildAnalysisRequest(folder, manifest, schema):

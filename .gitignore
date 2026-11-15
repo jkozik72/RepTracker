@@ -40,3 +40,5 @@ src/website/data/ai-settings.json
 
 # The Anthropic API key saved in Settings (Claude provider). Never commit it.
 src/website/data/claude-key.json
+# Which Claude model this computer uses (chosen in Settings)
+src/website/data/claude-settings.json
