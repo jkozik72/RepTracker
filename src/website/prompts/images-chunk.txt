@@ -1,0 +1,6 @@
+IMAGES chunk {{chunk_index}} of {{chunk_count}} for {{name}}
+
+The attached PDF has {{image_count}} images from the {{camera_view}} camera, one per minute, oldest first: {{first_time}} to {{last_time}}. Each page is labelled with its timestamp.
+The hot side is on the {{hot_side}}. The enclosure is {{enclosure_width_cm}} cm wide.
+
+For each image, give the lizard's horizontal position in cm from the left wall in "Movement Data" (null if it is not visible). Use all chunks together to fill the other fields.

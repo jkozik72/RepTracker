@@ -1,0 +1,26 @@
+# Prompt formats
+
+Every prompt RepTracker sends is built from the files here, so they can be read and edited by hand. `{{name}}` marks a value filled in by `main.py` (`FillTemplate`).
+
+| File | Used for | Filled by |
+|---|---|---|
+| `system.txt` | System prompt for every analysis request | `GeneratePrompts` |
+| `context-chunk.txt` | The CONTEXT chunk: lizard config, sensor summary for the range, species research, previous analysis | `GeneratePrompts` |
+| `images-chunk.txt` | Text sent with each IMAGES chunk; the chunk's PDF holds up to 60 images, 1 per minute | `GeneratePrompts` |
+| `response-schema.json` | JSON Schema the AI's answer must match; also pasted into `system.txt` | `GeneratePrompts`, `SendPrompt` |
+| `ask.txt` | A keeper's question from the dashboard | `AskQuestion` |
+
+## One prompt chunk per lizard
+
+```
+lizard chunk (one request)
+├── system.txt + response-schema.json
+├── CONTEXT chunk      context-chunk.txt
+├── IMAGES chunk 1     images-chunk.txt + images-01.pdf  (minutes 0-59)
+├── IMAGES chunk 2     images-chunk.txt + images-02.pdf  (minutes 60-119)
+└── ...
+```
+
+A range shorter than 60 min gives one IMAGES chunk with fewer images (at least 1). A video shorter than the range loops, as the live "camera" does.
+
+Generated bundles are written to `data/<mode>/reptiles/<id>/prompts/<bundle>/` (git-ignored) with a `manifest.json`, so every prompt can be inspected before it is sent.
