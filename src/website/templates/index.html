@@ -1434,15 +1434,63 @@ function liveIsFresh() {
   if (liveStatus.device === "off") return false;
   return !!liveStatus.lastFrameAt && Date.parse(liveStatus.serverTime) - Date.parse(liveStatus.lastFrameAt) < 8000;
 }
+// One live stream per page, shared by every live picture on it. Browsers allow only 6 connections at once to one
+// server, and a stream keeps its connection open: one stream per picture (and per tab) used them all up, so
+// every other request (pictures, readings, analyses) waited. The stream is read here, each JPEG is cut out of
+// it, and all the live pictures show it. It stops while the tab is hidden, and when no live picture is shown.
+const liveFeed = { subs: new Map(), ctrl: null, url: null, retry: null };   // subs: img -> its cover (or null)
 function startStream(img, cover) {
   img.dataset.mode = "stream"; img.dataset.real = "1";
-  img.onload = () => { img.dataset.ok = "1"; if (cover) cover.hidden = true; };
-  img.onerror = () => { stopStream(img); img.dataset.next = Date.now() + 2000; };
-  img.src = `/media/camera/stream?n=${++liveRequests}`;
+  liveFeed.subs.set(img, cover);
+  if (liveFeed.url) showFeedFrame(img, cover, liveFeed.url);
+  openFeed();
 }
 function stopStream(img) {
-  img.onload = img.onerror = null; img.removeAttribute("src"); img.dataset.mode = ""; img.dataset.ok = "0";
+  liveFeed.subs.delete(img);
+  img.removeAttribute("src"); img.dataset.mode = ""; img.dataset.ok = "0";
+  if (!liveFeed.subs.size) closeFeed();
 }
+function showFeedFrame(img, cover, url) {
+  img.src = url; img.dataset.ok = "1";
+  if (cover) cover.hidden = true;
+}
+function closeFeed() {
+  clearTimeout(liveFeed.retry); liveFeed.retry = null;
+  if (liveFeed.ctrl) { liveFeed.ctrl.abort(); liveFeed.ctrl = null; }
+}
+async function openFeed() {
+  if (liveFeed.ctrl || liveFeed.retry || document.hidden || !liveFeed.subs.size) return;
+  const ctrl = liveFeed.ctrl = new AbortController();
+  const ascii = new TextDecoder("latin1");
+  try {
+    const res = await fetch(`/media/camera/stream?n=${++liveRequests}`, { signal: ctrl.signal, cache: "no-store" });
+    if (!res.ok || !res.body) throw new Error(res.status);
+    const reader = res.body.getReader();
+    let buf = new Uint8Array(0);
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const joined = new Uint8Array(buf.length + value.length); joined.set(buf); joined.set(value, buf.length); buf = joined;
+      // Each part: "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: N\r\n\r\n" + N bytes of JPEG + "\r\n"
+      for (;;) {
+        const head = ascii.decode(buf.subarray(0, Math.min(buf.length, 200)));
+        const end = head.indexOf("\r\n\r\n"), len = +((head.match(/Content-Length:\s*(\d+)/i) || [])[1]);
+        if (end < 0 || !len || buf.length < end + 4 + len) break;          // the rest of this frame is still coming
+        const jpeg = buf.slice(end + 4, end + 4 + len);
+        buf = buf.slice(end + 4 + len);
+        const old = liveFeed.url;
+        liveFeed.url = URL.createObjectURL(new Blob([jpeg], { type: "image/jpeg" }));
+        liveFeed.subs.forEach((cover, img) => showFeedFrame(img, cover, liveFeed.url));
+        if (old) setTimeout(() => URL.revokeObjectURL(old), 1000);           // after the pictures have swapped
+      }
+    }
+  } catch {}
+  if (liveFeed.ctrl !== ctrl) return;                                     // closed on purpose
+  liveFeed.ctrl = null;
+  // The stream ended (camera stopped, server restarted): try again shortly while pictures still want it.
+  if (liveFeed.subs.size) liveFeed.retry = setTimeout(() => { liveFeed.retry = null; openFeed(); }, 2000);
+}
+document.addEventListener("visibilitychange", () => document.hidden ? closeFeed() : openFeed());
 function syncLive(img, cover, now, speed) {
   if (img.dataset.busy === "1" || +(img.dataset.next || 0) > Date.now()) return;
   const real = speed === 1 && now > Date.now() - 15000;   // running, and not set back into the past

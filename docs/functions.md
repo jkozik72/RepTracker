@@ -274,6 +274,7 @@ The Claude provider (D4): the Claude API through the `anthropic` package, import
 | `noteText` | A notification's text with species check labels from the profile | |
 | `shrinkPhoto` / `clearAskPhoto` | Ask: the camera / attach button's photo, shrunk on the device to 1568 px JPEG before it is sent; removing it | |
 | `renderTrust` | Settings: whether this browser trusts RepTracker (its service worker registered), is running as the installed app, or needs the certificate; the Install button appears when the browser offers it | |
+| `startStream` / `stopStream` / `openFeed` / `closeFeed` | The live camera: one stream per page (`/media/camera/stream`), shared by every live picture; each JPEG is cut out of it and shown in all of them. Closed while the tab is hidden or no live picture is shown (browsers allow 6 connections per server; a stream per picture used them up) | |
 | `loadSchedule` / `renderSchedule` / `saveSchedule` | Settings, Automatic analysis and phone alerts: the server's schedule, turning alerts on or off for this device, the devices list, a test alert | |
 | `loadPhone` / `showPhoneQr` | Settings, Open on your phone: the server's addresses and a QR code for the one picked | |
 | `narrowScreen` | Phones (600px wide or less): charts are drawn 360 wide with fewer labels, so their text stays readable; crossing it redraws | |
