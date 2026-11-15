@@ -30,4 +30,11 @@ Entry format:
 - **Chose:** C, because the facts are about the event, not the project, and a separate folder with `project-fit.md` keeps the comparison explicit.
 - **Consequences:** `docs/hackathon/` follows the same editing rules as the other synthesized docs. Its analysis blocks are labelled as not official. Which tracks to enter stays open (Q6).
 - **Sources:** docs/notes/2026-11-14-hack-the-nest-research-report.md
+
+## D3 (2026-11-14): Recorded video and sensor files instead of live cameras and sensors
+- **Context:** The dashboard should look live: a video and a movement graph that update as if in real time. With real hardware that means real cameras, real sensors, and real-time processing. The team made this choice at the whiteboard; this entry logs it, and its date is the day it was logged.
+- **Options:** A: real cameras and sensors, streamed and processed in real time. B: recorded, finite files, processed ahead of time: one video the team takes of a real lizard, videos found online of other lizards in their enclosures, and finite sensor time series. The web app reads them by index, so the dashboard looks live.
+- **Chose:** B, because it simplifies real-time processing (brief) and nothing requires real-time polling (board: "files not streams").
+- **Consequences:** Inputs are files, not streams. Video is preprocessed: raw video in, processed video and statistics out, and the backend polls those. No hardware integration. We give up showing the system on live hardware: "real time" on the dashboard is a playback of recorded data. How the playback maps onto time is open (Q17).
+- **Sources:** `docs/notes/2026-11-14-project-brief.md` § Inputs (s. 22–29); `docs/notes/2026-11-14-whiteboard-system-design.md` § Design decisions.
 - **Replaces:** none

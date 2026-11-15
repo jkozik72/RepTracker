@@ -19,9 +19,30 @@ Proposed starting conventions; confirm or change them with a decision entry, the
 
 One term per concept. Add a row before using a new domain word in code.
 
+Terms and meanings come from the 2026-11-14 notes: the [brief](notes/2026-11-14-project-brief.md), the [board](notes/2026-11-14-whiteboard-system-design.md), and the [UI board](notes/2026-11-14-whiteboard-ui.md). Where those use several words for one concept, the word kept is the term and the others are under "Don't use": a proposal until the team confirms it.
+
 | Term | Meaning | Don't use |
 |---|---|---|
-| TBD | | |
+| lizard | The tracked animal. One section of the dashboard each. Whether other reptiles are in scope: Q18. | animal, pet |
+| species | A lizard's species: a field of the add-lizard form and the input to research. | |
+| web app | The local website as a whole: UI, web interface, backend. | website, app |
+| dashboard | The page with the status and alerts bar and one section per lizard. | |
+| raw video | A recorded video file, before motion tracking. | |
+| processed video | The video that motion tracking outputs. | |
+| motion tracking | Video in, position of the lizard out. | |
+| position | Where the lizard is in a frame. Units: TBD (Q13). | |
+| speed | How fast the position changes. Units: TBD (Q13). | |
+| lizard present | Whether the lizard is in the frame. | in frame, on screen |
+| statistics | Values computed per lizard: position, speed, lizard present, and others (Q13). | |
+| movement graph | The dashboard graph of how much a lizard moved throughout the day. | |
+| research | The LLM's information gathering for one species. | |
+| structured information | What research outputs, per species. | knowledge base, research files |
+| poll | One request to the AI model to analyze a frame. Poll rate: how often that happens. | |
+| report | The structured result of one poll. It gives the status. | |
+| status | A lizard's condition, from a finite set (examples: shedding, overweight). The set: Q12. | |
+| alert | A notice to the user at the top of the dashboard. | |
+| LLM, VLM | Large language model; vision-language model. | |
+| DSP | Digital signal processing. The board's label for the motion-tracking stage. | |
 
 ## Reference
 
