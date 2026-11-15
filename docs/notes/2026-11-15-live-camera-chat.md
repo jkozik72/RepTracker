@@ -33,5 +33,5 @@ Partly reverses D3 (recorded files, not live cameras) for cameras. Sensors stay 
 
 - [x] Added Q21 to `docs/open-questions.md`
 - [x] Built the live camera as a frame store (`src/website/camera.py`), branch `src/live-camera`; documented in `docs/functions.md` and `src/pi/README.md`
-- [ ] Owner to answer Q21; then add D9 (Replaces: D3, for cameras only) and update `overview.md` and `architecture.md`
+- [ ] Owner to answer Q21; then add D11 (Replaces: D3, for cameras only) and update `overview.md` and `architecture.md`
 - [ ] Measure frame size (kB) and CPU load on the Pi; until then both are TBD
