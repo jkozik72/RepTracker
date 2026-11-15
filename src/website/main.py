@@ -1052,13 +1052,28 @@ def _LabelIso(label, fallback):
         return fallback
 
 
+MAX_MOMENTS = 2   # AI notable moments kept per analysis
+_ROUTINE = re.compile(r"\b(mov(ed|es|ing)|walk(ed|s|ing)|climb(ed|s|ing)|crawl(ed|s|ing)|wander(ed|s|ing)|"
+                      r"explor(ed|es|ing)|active|activity|stay(ed|s|ing)|rest(ed|s|ing)|bask(ed|s|ing)|"
+                      r"repositioned|shift(ed|s|ing)|turn(ed|s|ing)|visible|perched|sitting|lying)\b", re.I)
+_EVENT = re.compile(r"\b(shed|shedding|drank|drink|drinking|eat|ate|eating|hunt|hunted|dropping|defecat|urat|dig|dug|"
+                    r"digging|burrow|soak|egg|mating|gap(e|ed|ing)|yawn|first|unusual|odd|strange|lick|flick)", re.I)
+
+
+def NotableMoment(note):
+    """Whether an AI notable moment is worth a notification: routine movement ("walked across the substrate",
+    "moved to the right side") is not; the Movement section shows it. Applied to old analyses too."""
+    return bool(note) and (bool(_EVENT.search(note)) or not _ROUTINE.search(note))
+
+
 def Notifications(analyses, feedings, limit=40):
     """What happened, newest first: the AI's notable moments, eating and droppings seen, changes between
     analyses (activity, species checks), and logged feedings. Alerts (concerns) are separate."""
     out, previous = [], None
     for a in analyses:
         r, end = a.get("result", {}), a["range"]["end"]
-        for m in r.get("Notable moments") or []:
+        moments = [m for m in r.get("Notable moments") or [] if isinstance(m, dict) and NotableMoment(m.get("note"))]
+        for m in moments[:MAX_MOMENTS]:
             if m.get("note"):
                 out.append({"time": _LabelIso(m.get("time"), end), "text": m["note"], "kind": "ai"})
         if r.get("Eating seen") == "eating":
