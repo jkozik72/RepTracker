@@ -275,6 +275,8 @@
   .phone-row { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
   .phone-row img { background: #fff; border-radius: 8px; border: 1px solid var(--border); flex: none; }
   .phone-row > div { flex: 1; min-width: 200px; }
+  .phone-link { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0 0; }
+  .phone-link a { font: 600 15px ui-monospace, Consolas, monospace; word-break: break-all; }
   .steps { margin-top: 6px; } .steps summary { cursor: pointer; font-weight: 600; }
   .steps ol { margin: 6px 0 0; padding-left: 20px; } .steps li { margin: 4px 0; }
   .fingerprint { word-break: break-all; font-size: 11.5px; }
@@ -580,7 +582,9 @@ window.swReady = ("serviceWorker" in navigator && window.isSecureContext)
           <div>
             <label for="phone-url" style="margin-top:0">Address</label>
             <select id="phone-url"></select>
-            <p class="hint">Scan with the phone's camera, on the same Wi-Fi.</p>
+            <p class="phone-link"><a id="phone-link" href="#" target="_blank" rel="noopener"></a>
+              <button class="btn" type="button" id="phone-copy">Copy</button></p>
+            <p class="hint">Scan with the phone's camera on the same Wi-Fi, or type the link in the phone's browser. If it doesn't open, try another address from the list.</p>
           </div>
         </div>
         <div id="trust-box" hidden>
@@ -2152,7 +2156,16 @@ async function renderTrust(installed) {
     : trusted ? "✓ This browser trusts RepTracker, so it can be installed."
     : "This browser doesn't trust RepTracker yet (the certificate warning). Install the RepTracker certificate first:";
 }
-function showPhoneQr() { $("#phone-qr").src = `/api/phone/qr.svg?url=${encodeURIComponent($("#phone-url").value)}`; }
+function showPhoneQr() {
+  const url = $("#phone-url").value;
+  $("#phone-qr").src = `/api/phone/qr.svg?url=${encodeURIComponent(url)}`;
+  $("#phone-link").textContent = url; $("#phone-link").href = url;
+}
+$("#phone-copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("#phone-url").value); $("#phone-copy").textContent = "Copied"; }
+  catch { $("#phone-copy").textContent = "Select and copy the link"; }
+  setTimeout(() => { $("#phone-copy").textContent = "Copy"; }, 2000);
+});
 $("#phone-url").addEventListener("change", showPhoneQr);
 
 /* Settings: this installation. Update, restart and uninstall only on a Pi installed with src/pi/install.sh (D8). */

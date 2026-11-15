@@ -148,6 +148,29 @@ class InstallableAppTest(unittest.TestCase):
         self.assertEqual(self.client.get("/api/system").status_code, 401)
 
 
+class AddressTest(unittest.TestCase):
+    def test_the_open_address_comes_first_and_bad_ones_are_left_out(self):
+        import app as webapp
+        with mock.patch.dict(webapp.app.config, {"LAN_PORT": 443}), \
+             mock.patch.object(auth, "LanAddresses", return_value=["10.8.0.2", "192.168.1.20", "100.64.1.2"]), \
+             mock.patch.object(auth, "HostNames", return_value=["reptracker", "reptracker.local"]), \
+             mock.patch.object(auth, "AuthorityCertificate", return_value=(b"", "AA")):
+            urls = [l["url"] for l in webapp.PhoneLinks("192.168.1.20")["links"]]
+            self.assertEqual(urls, ["https://192.168.1.20", "https://10.8.0.2", "https://100.64.1.2", "https://reptracker.local"])
+            self.assertEqual(webapp.PhoneLinks("localhost:5000")["links"][0]["url"], "https://10.8.0.2")   # this computer: not useful
+            self.assertEqual(webapp.PhoneLinks("evil.example")["links"][0]["url"], "https://10.8.0.2")     # only its own addresses
+
+    def test_lan_addresses_skip_loopback_link_local_and_junk(self):
+        addrinfo = [(0, 0, 0, "", ("127.0.1.1", 0)), (0, 0, 0, "", ("192.168.1.20", 0))]
+        hostname_i = mock.Mock(stdout="192.168.1.20 169.254.3.4 172.17.0.1 fe80::1 junk\n")
+        with mock.patch.object(auth.socket, "getaddrinfo", return_value=addrinfo), \
+             mock.patch.object(auth.sys, "platform", "linux"), mock.patch("subprocess.run", return_value=hostname_i):
+            found = auth.LanAddresses()
+        self.assertNotIn("127.0.1.1", found); self.assertNotIn("169.254.3.4", found); self.assertNotIn("junk", found)
+        self.assertIn("192.168.1.20", found); self.assertIn("172.17.0.1", found)
+        self.assertEqual(len(found), len(set(found)))
+
+
 class CertificateTest(unittest.TestCase):
     def test_local_name_and_remade_after_a_rename(self):
         from cryptography import x509
