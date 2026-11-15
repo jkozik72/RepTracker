@@ -46,3 +46,20 @@ Entry format:
 - **Consequences:** The API key is entered in Settings (dev mode) and kept on the computer that runs the app (`src/website/data/claude-key.json`, git-ignored), or read from `ANTHROPIC_API_KEY`. Gemini and the Mock stay selectable in Settings; the Mock remains the default until a key is saved and Claude is selected. Requests cost money per call.
 - **Sources:** `docs/notes/2026-11-15-claude-provider-chat.md`
 - **Replaces:** none
+
+## D5 (2026-11-15): AI-written species profiles, stored and reused, with the species typed in plain English
+- **Context:** Analyses need to know what is normal for a species (temperatures, humidity, feeding, shedding, common diseases and their signs) to judge an animal well. The species was picked from a fixed list of two with no stored knowledge; Q14 left research open.
+- **Options:** A: a fixed species list with hand-written care data. B: ask the AI about the species in every analysis. C: one AI call per species writes a structured profile, stored, shown to the keeper, editable, and reused by every analysis and for sensor alerts.
+- **Chose:** C. The keeper types the species in plain English on the Research tab; the AI provider in use fills `prompts/profile-schema.json` once; the profile is saved in `src/website/research/<slug>/profile.json` (committed) with reference photos from Wikimedia Commons (git-ignored, with author and licence). It goes into the CONTEXT chunk of every analysis, and the dashboard compares live sensor readings with its ranges.
+- **Consequences:** Any species can be typed; one research call per species instead of extra tokens in every analysis. Alerts depend on AI-written ranges, so the Research tab marks a profile "not checked yet" until a keeper edits it, and shows the AI's own confidence note. Research works with Claude and the Mock; Gemini is not supported for research yet.
+- **Sources:** `docs/notes/2026-11-15-species-profiles-chat.md`; `docs/notes/2026-11-14-project-brief.md` § Research and image analysis
+- **Replaces:** none
+
+## D6 (2026-11-15): Any reptile or amphibian, called "animal"; what to track comes from the species profile
+- **Context:** RepTracker was built for lizards: a fixed answer format (weight, shed, food bowl, basking/exploring/hiding) and "lizard" in the UI. Keepers want it for any reptile, and frogs; what to check differs by species (turtles do not shed like lizards). Q18 asked whether other reptiles are in scope.
+- **Options:** A: lizards only. B: any reptile, called "reptile", with one answer format. C: any reptile or amphibian, called "animal", with common stats for every animal plus checks defined per species in its profile (D5).
+- **Chose:** C. Every analysis asks for: visible, activity (the species' own list), body condition, eating, droppings, food dish, hazards, conditions seen (the species' named conditions), position; plus 1 to 4 species checks ("trackedStats") that the AI writes into the profile at research time, each with its answers and which answers are a concern. "Animal" because frogs and salamanders are amphibians.
+- **Consequences:** `prompts/response-schema.json` is the animal-neutral base; each bundle gets its own copy built from the profile. The dashboard shows whatever the analysis holds, with alerts for concern answers and named conditions, and Watch for in-between answers. Profiles made before this change have no checks until regenerated. Code names (`lizards`, `/lizards` routes, `data/<mode>/reptiles/`) stay as they are.
+- **Sources:** `docs/notes/2026-11-15-species-checks-chat.md`; `docs/notes/2026-11-15-species-profiles-chat.md`
+- **Replaces:** none
+

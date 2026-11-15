@@ -28,10 +28,10 @@ LABELS = ["2026-11-12 00:00 UTC", "2026-11-12 00:01 UTC", "2026-11-12 00:02 UTC"
 
 def GoodReply():
     return {
-        "Weight": "healthy", "Shed": "not shedding", "Food in bowl": "false", "Current activity": "basking",
+        "Animal visible": "yes", "Current activity": "basking", "Body condition": "healthy", "Eating seen": "not eating",
+        "Droppings seen": "none seen", "Food in bowl": "false", "Species checks": {"shed": "not shedding"}, "Conditions seen": [],
         "Hazardous conditions": {"Improper substrate": False, "Unsafe lighting": False, "Temperature too high": False,
-                                 "Temperature too low": False, "Humidity too high": False,
-                                 "Signs of disease": "none", "Other": "none"},
+                                 "Temperature too low": False, "Humidity too high": False, "Other": "none"},
         "Movement Data": [{"time": label, "position": 10.0 * (i + 1)} for i, label in enumerate(LABELS)],
         "Analysis": "Cheeto basked on the hot side for the whole range.",
     }
@@ -63,44 +63,43 @@ class NormalizeResultTest(unittest.TestCase):
         # NormalizeResult falls back to the last option, so the schema must keep this order.
         for key, spec in SCHEMA["properties"].items():
             if "enum" in spec:
-                self.assertRegex(spec["enum"][-1], r"^(can't|no )", key)
+                self.assertRegex(spec["enum"][-1], r"^(can't|no$|no )", key)
 
     def test_enums_ignore_case_and_fall_back(self):
         raw = GoodReply()
-        raw.update({"Weight": " Healthy ", "Shed": "peeling everywhere", "Food in bowl": True, "Current activity": None})
+        raw.update({"Body condition": " Healthy ", "Species checks": {"shed": "peeling everywhere"}, "Food in bowl": True, "Current activity": None})
         result = self.Normalize(raw)
-        self.assertEqual(result["Weight"], "healthy")
-        self.assertEqual(result["Shed"], "can't see lizard")
+        self.assertEqual(result["Body condition"], "healthy")
+        self.assertEqual(result["Species checks"]["shed"], "can't see animal")
         self.assertEqual(result["Food in bowl"], "true")
-        self.assertEqual(result["Current activity"], "can't see lizard")
+        self.assertEqual(result["Current activity"], "can't see animal")
 
     def test_missing_and_unknown_keys(self):
         notes = []
-        result = ai.NormalizeResult({"Weight": "obese", "Extra": "dropped", "Hazardous conditions": "none"}, SCHEMA, LABELS, 90, notes)
+        result = ai.NormalizeResult({"Body condition": "overweight", "Extra": "dropped", "Hazardous conditions": "none"}, SCHEMA, LABELS, 90, notes)
         self.assertEqual(len(notes), 2)                       # positions, and the fields shown as unknown
-        self.assertIn("Shed, Food in bowl, Current activity, Hazardous conditions", notes[1])
-        self.assertNotIn("Weight", notes[1])
+        self.assertIn("Animal visible, Current activity, Eating seen, Droppings seen, Food in bowl, Species checks / shed, Hazardous conditions", notes[1])
+        self.assertNotIn("Body condition", notes[1])
         self.assertNotIn("Extra", result)
-        self.assertEqual(result["Weight"], "obese")
+        self.assertEqual(result["Body condition"], "overweight")
         self.assertEqual(result["Food in bowl"], "no bowl visible")
+        self.assertEqual(result["Conditions seen"], [])
         self.assertEqual(result["Hazardous conditions"]["Unsafe lighting"], False)
-        self.assertEqual(result["Hazardous conditions"]["Signs of disease"], "none")
+        self.assertEqual(result["Hazardous conditions"]["Other"], "none")
         self.assertEqual([m["position"] for m in result["Movement Data"]], [None, None, None])
         self.assertTrue(result["Analysis"])
 
     def test_hazards_are_coerced(self):
         raw = GoodReply()
         raw["Hazardous conditions"] = {"Improper substrate": "true", "Unsafe lighting": "no", "Temperature too high": 1,
-                                       "Temperature too low": None, "Signs of disease": "  stuck shed on toes ",
-                                       "Other": None, "Made up": True}
+                                       "Temperature too low": None, "Other": "  loose sand substrate ", "Made up": True}
         hazards = self.Normalize(raw)["Hazardous conditions"]
         self.assertEqual(hazards["Improper substrate"], True)
         self.assertEqual(hazards["Unsafe lighting"], False)
         self.assertEqual(hazards["Temperature too high"], True)
         self.assertEqual(hazards["Temperature too low"], False)
         self.assertEqual(hazards["Humidity too high"], False)
-        self.assertEqual(hazards["Signs of disease"], "stuck shed on toes")
-        self.assertEqual(hazards["Other"], "none")
+        self.assertEqual(hazards["Other"], "loose sand substrate")
         self.assertNotIn("Made up", hazards)
 
     def test_hazard_text_that_means_nothing_to_report_becomes_none(self):
@@ -108,8 +107,8 @@ class NormalizeResultTest(unittest.TestCase):
         for text in ["None", "none.", "None observed.", "N/A", "n/a", "No", "No signs of disease", "No visible signs of disease observed.",
                      "Nothing", "No other hazards", "No issues detected", "", "  ", None, False]:
             raw = GoodReply()
-            raw["Hazardous conditions"]["Signs of disease"] = text
-            self.assertEqual(self.Normalize(raw)["Hazardous conditions"]["Signs of disease"], "none", repr(text))
+            raw["Hazardous conditions"]["Other"] = text
+            self.assertEqual(self.Normalize(raw)["Hazardous conditions"]["Other"], "none", repr(text))
         for text in ["Stuck shed on the toes", "No UVB lamp is visible", "None of the lamps has a guard", "No water bowl"]:
             raw = GoodReply()
             raw["Hazardous conditions"]["Other"] = text
@@ -327,15 +326,15 @@ class RequestTest(WithBundle):
 
     def test_repairs_are_reported_in_notes(self):
         reply = GoodReply()
-        reply["Shed"] = "peeling everywhere"
+        reply["Species checks"] = {"shed": "peeling everywhere"}
         reply["Movement Data"] = reply["Movement Data"][:2]
         self.Use(FakeResponse(json.dumps(reply)))
         result = self.Analyze()
-        self.assertEqual(result["Shed"], "can't see lizard")
+        self.assertEqual(result["Species checks"]["shed"], "can't see animal")
         self.assertEqual([m["position"] for m in result["Movement Data"]], [10.0, 20.0, None])
         notes = result["_details"]["notes"]
         self.assertIn("2 position(s) for 3 images", notes[0])
-        self.assertIn("Shed", notes[1])
+        self.assertIn("Species checks / shed", notes[1])
 
     def test_a_question_is_one_plain_request(self):
         self.Use(FakeResponse("  She is basking on the hot side.  "))
@@ -414,7 +413,7 @@ class ReplyTest(WithBundle):
 
     def test_a_fenced_reply_is_accepted(self):
         self.Use(FakeResponse("```json\n" + json.dumps(GoodReply()) + "\n```"))
-        self.assertEqual(self.Analyze()["Weight"], "healthy")
+        self.assertEqual(self.Analyze()["Body condition"], "healthy")
 
 
 class ErrorTest(WithBundle):
@@ -465,7 +464,7 @@ class ErrorTest(WithBundle):
                 ai._client = None                         # as if another thread had dropped the shared client meanwhile
                 return super().generate_content(**request)
         self.client = ai._client = Closing(FakeResponse(json.dumps(GoodReply())))
-        self.assertEqual(self.Analyze()["Weight"], "healthy")
+        self.assertEqual(self.Analyze()["Body condition"], "healthy")
 
 
 class StatusTest(unittest.TestCase):

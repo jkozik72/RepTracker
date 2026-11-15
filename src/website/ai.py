@@ -148,6 +148,32 @@ def NormalizeMovement(raw, frameLabels, positionMax, notes=None):
     return movement
 
 
+MAX_LIST_ITEMS = 20
+
+
+def _Nested(value, spec, path, unknown):
+    """An object or a list from the answer format, field by field: enums matched (else their last option),
+    booleans, and short text. A list drops entries that are not objects and keeps at most MAX_LIST_ITEMS."""
+    if "enum" in spec:
+        option = _Enum(value, spec["enum"])
+        if option is None:
+            unknown.append(path)
+        return option or spec["enum"][-1]
+    kind = spec.get("type")
+    if kind == "object":
+        value = value if isinstance(value, dict) else {}
+        return {name: _Nested(value.get(name), sub, f"{path} / {name}", unknown) for name, sub in spec.get("properties", {}).items()}
+    if kind == "array":
+        items = [v for v in value if isinstance(v, dict) or "enum" in spec["items"]] if isinstance(value, list) else []
+        out = [_Nested(item, spec["items"], f"{path} [{i + 1}]", unknown) for i, item in enumerate(items[:MAX_LIST_ITEMS])]
+        if spec["items"].get("type") == "object":    # drop entries that are empty after cleaning (no name)
+            out = [item for item in out if any(str(v).strip() for v in item.values())]
+        return out
+    if kind == "boolean":
+        return _Bool(value)
+    return _Text(value, 500)
+
+
 def NormalizeResult(raw, schema, frameLabels, positionMax, notes=None):
     """Force the model's reply into the shape of response-schema.json.
 
@@ -176,6 +202,8 @@ def NormalizeResult(raw, schema, frameLabels, positionMax, notes=None):
                 result[key][name] = _Bool(hazards.get(name)) if sub.get("type") == "boolean" else _HazardText(hazards.get(name))
         elif key == "Movement Data":
             result[key] = NormalizeMovement(value, frameLabels, positionMax, notes)
+        elif spec.get("type") in ("object", "array"):      # "Species checks", "Conditions seen", from the species profile
+            result[key] = _Nested(value, spec, key, unknown)
         else:
             result[key] = _Text(value, MAX_ANALYSIS_CHARS)
     if unknown:

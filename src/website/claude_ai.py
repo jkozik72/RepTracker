@@ -365,6 +365,21 @@ def Answer(prompt, image=None):
     return ReadReply(response)[:MAX_ANSWER_CHARS]
 
 
+RESEARCH_TIMEOUT_S = 300
+
+
+def Research(prompt, schema):
+    """Write a species profile: prompts/research.txt (already filled in) in, a dict shaped like
+    prompts/profile-schema.json out (constrained by structured outputs), plus "_details"."""
+    request = {**_Common(RESEARCH_TIMEOUT_S, ANALYSIS_MAX_TOKENS),
+               "output_config": {"effort": "medium", "format": {"type": "json_schema", "schema": StructuredSchema(schema)}},
+               "messages": [{"role": "user", "content": prompt}]}
+    response, seconds = _Call(request)
+    profile = ParseJson(ReadReply(response))
+    details = _Details(response, request, seconds, [])
+    return profile, details
+
+
 def Ping():
     """One tiny request that proves the key and model work; returns a sentence."""
     request = {**_Common(QUICK_TIMEOUT_S, 1024), "output_config": {"effort": "low"},

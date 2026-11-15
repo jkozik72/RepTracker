@@ -28,6 +28,7 @@ from PIL import Image, ImageDraw
 
 import ai
 import claude_ai
+import research
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -37,7 +38,6 @@ RESEARCH = ROOT / "research"
 AI_SETTINGS = DATA / "ai-settings.json"   # which AI provider this computer uses (git-ignored)
 
 MODES = ["toy", "main"]
-SPECIES = ["leopard gecko", "skink"]
 CAMERA_VIEWS = ["top", "side"]
 SIDES = ["left", "right"]
 TEMP_UNITS = ["F", "C"]
@@ -231,6 +231,18 @@ def LoadConfig(mode, lizardId):
     return config
 
 
+def ProfileBrief(species):
+    """What the dashboard needs from a species profile: its name and the ranges for sensor alerts."""
+    record = research.FindRecord(species)
+    if not record:
+        return None
+    p = record["profile"]
+    return {"slug": record["slug"], "commonName": p["commonName"], "temperaturesF": p["temperaturesF"],
+            "humidityPercent": p["humidityPercent"],
+            "trackedStats": [{k: s[k] for k in ("id", "label", "options", "concernOptions")} for s in p.get("trackedStats", [])],
+            "conditions": {c["name"]: c["urgency"] for c in p.get("conditions", [])}}
+
+
 def ListLizards(mode):
     """Every lizard in this mode's reptiles.json with its config and latest analysis."""
     lizards = []
@@ -241,7 +253,8 @@ def ListLizards(mode):
         if config is None:
             continue  # listed but never configured
         analyses = ReadJson(folder / "analyses.json", [])
-        lizards.append({"id": lizardId, "config": config, "latest": analyses[-1] if analyses else None})
+        lizards.append({"id": lizardId, "config": config, "latest": analyses[-1] if analyses else None,
+                        "profile": ProfileBrief(config["species"])})
     return lizards
 
 
@@ -253,6 +266,14 @@ def _Choice(value, options, field):
             raise RepTrackerError(f"{field}: no files yet. Turn on dev mode and upload one in Settings.")
         raise RepTrackerError(f"{field}: choose one of {', '.join(options)}.")
     return value
+
+
+def _Species(value):
+    """The species as the keeper typed it, in plain English (matched to a profile on the Research tab)."""
+    species = " ".join(str(value or "").split())
+    if not 1 <= len(species) <= 60:
+        raise RepTrackerError('Species: type it in plain English, 1 to 60 characters (for example "leopard gecko").')
+    return species
 
 
 def LizardConfigFromForm(mode, formData, createdAt):
@@ -287,7 +308,7 @@ def LizardConfigFromForm(mode, formData, createdAt):
 
     return {
         "name": name,
-        "species": _Choice(formData.get("species"), SPECIES, "Species"),
+        "species": _Species(formData.get("species")),
         "enclosureWidthCm": width,
         "createdAt": createdAt,
         "camera": {
@@ -315,7 +336,7 @@ def CreateNewLizard(mode, formData):
     index = ReadJson(IndexPath(mode), [])
     index.append({"name": name, "folder path": f"reptiles/{lizardId}"})
     WriteJson(IndexPath(mode), index)
-    return {"id": lizardId, "config": config, "latest": None}
+    return {"id": lizardId, "config": config, "latest": None, "profile": ProfileBrief(config["species"])}
 
 
 def UpdateLizard(mode, lizardId, formData):
@@ -330,7 +351,8 @@ def UpdateLizard(mode, lizardId, formData):
             entry["name"] = config["name"]
     WriteJson(IndexPath(mode), index)
     analyses = ReadJson(LizardFolder(mode, lizardId) / "analyses.json", [])
-    return {"id": lizardId, "config": config, "latest": analyses[-1] if analyses else None}
+    return {"id": lizardId, "config": config, "latest": analyses[-1] if analyses else None,
+            "profile": ProfileBrief(config["species"])}
 
 
 def RemoveLizard(mode, lizardId):
@@ -518,19 +540,22 @@ def GeneratePrompts(mode, lizardId, startIso, endIso, imageCount=None):
     folder = LizardFolder(mode, lizardId) / "prompts" / bundleId
     (folder / "frames").mkdir(parents=True, exist_ok=True)
 
-    schema = (PROMPTS / "response-schema.json").read_text(encoding="utf-8")
+    # The answer format for this animal: the base format with its species' activities, checks and conditions
+    base = json.loads((PROMPTS / "response-schema.json").read_text(encoding="utf-8"))
+    schema = json.dumps(research.BuildResponseSchema(base, research.FindRecord(config["species"])), indent=2, ensure_ascii=False)
     (folder / "system.txt").write_text(FillTemplate("system.txt", {**common, "response_schema": schema}), encoding="utf-8")
-    shutil.copy(PROMPTS / "response-schema.json", folder / "response-schema.json")
+    (folder / "response-schema.json").write_text(schema, encoding="utf-8")
 
     analyses = ReadJson(LizardFolder(mode, lizardId) / "analyses.json", [])
     previous = analyses[-1]["result"].get("Analysis", "") if analyses else "None yet."
-    research = RESEARCH / f"{config['species'].replace(' ', '')}.json"
-    researchText = research.read_text(encoding="utf-8").strip() if research.exists() else ""
+    profile = research.FindRecord(config["species"])
+    researchText = research.PromptText(profile) if profile else ""
     context = FillTemplate("context-chunk.txt", {
         **common,
         "range_start": LabelTime(start), "range_end": LabelTime(end), "range_minutes": round(minutes),
         "sensor_summary": SummarizeSensors(mode, config, start, end),
-        "species_file": research.name, "research": researchText or "None yet.",
+        "species_file": f"{profile['slug']}/profile.json" if profile else "no profile yet",
+        "research": researchText or "None yet. (A profile can be created on the Research tab.)",
         "previous_analysis": previous,
     })
     (folder / "context.txt").write_text(context, encoding="utf-8")
@@ -607,6 +632,10 @@ def _MockPosition(img, scale):
 
 
 def MockProvider(folder, manifest, config):
+    """Offline stand-in: position from dark pixels; every other field from the bundle's own answer format,
+    as "can't see" or nothing found, so the dashboard shows the species' stats without inventing values."""
+    schema = ReadJson(folder / manifest["schema"], None) or ReadJson(PROMPTS / "response-schema.json", {})
+    props = schema.get("properties", {})
     width = config.get("enclosureWidthCm") or 100   # no width: % of the image width
     movement = []
     for chunk in manifest["chunks"]:
@@ -615,24 +644,36 @@ def MockProvider(folder, manifest, config):
     seen = [m["position"] for m in movement if m["position"] is not None]
     unit = "cm from the left wall" if config.get("enclosureWidthCm") else "% of the image width from the left"
     if not seen:
-        activity = "can't see lizard"
+        activity = "can't see animal"
     elif max(seen) - min(seen) > 0.25 * width:
         activity = "exploring"
     else:
         last = seen[-1] / width
         hotNear = last < 0.35 if config["sensors"]["hotSide"] == "left" else last > 0.65
         activity = "basking" if hotNear else "hiding"
-    return {
-        "Weight": "can't see lizard", "Shed": "can't see lizard", "Food in bowl": "no bowl visible",
+    activities = props.get("Current activity", {}).get("enum", [])
+    if activities and activity not in activities:
+        activity = "other" if "other" in activities else activities[-1]
+    last = lambda key, fallback: (props.get(key, {}).get("enum") or [fallback])[-1]
+    result = {
+        "Animal visible": "partly" if seen else "no",
         "Current activity": activity,
+        "Body condition": last("Body condition", "can't see animal"),
+        "Eating seen": last("Eating seen", "can't see animal"),
+        "Droppings seen": last("Droppings seen", "can't tell"),
+        "Food in bowl": "no bowl visible",
+        "Conditions seen": [],
         "Hazardous conditions": {"Improper substrate": False, "Unsafe lighting": False, "Temperature too high": False,
-                                 "Temperature too low": False, "Humidity too high": False,
-                                 "Signs of disease": "none", "Other": "none"},
+                                 "Temperature too low": False, "Humidity too high": False, "Other": "none"},
         "Movement Data": movement,
         "Analysis": (f"[Mock provider, not a real AI] {config['name']} was seen in {len(seen)} of {len(movement)} images"
                      + (f", between {min(seen):.0f} and {max(seen):.0f} {unit}, mostly {activity}." if seen else ".")
-                     + " Weight, shed and hazards need a real provider."),
+                     + " Body condition, species checks and conditions need a real provider."),
     }
+    checks = props.get("Species checks", {}).get("properties", {})
+    if checks:
+        result["Species checks"] = {sid: spec["enum"][-1] for sid, spec in checks.items()}
+    return result
 
 
 def MockAnswer(prompt, latest, sensorsNow, image=None):
@@ -798,3 +839,117 @@ def AskQuestion(mode, lizardId, question, nowIso, vision=False):
     if image:
         reply["image"] = "data:image/jpeg;base64," + base64.standard_b64encode(image).decode("ascii")
     return reply
+
+
+# ---------- species profiles (Research tab) ----------
+# A researcher turns prompts/research.txt into a dict shaped like prompts/profile-schema.json:
+#   RESEARCHERS[name](prompt, schema) -> (profile, details)
+
+def MockResearch(prompt, schema):
+    species = re.search(r"^\s{4}(.+)$", prompt, re.M).group(1).strip()
+
+    def r(lo, hi):
+        return {"min": lo, "max": hi}
+
+    return ({
+        "commonName": species.title(), "scientificName": "unknown (Mock)", "animalType": "other",
+        "activityPattern": "cathemeral", "habitat": "terrestrial",
+        "summary": f"[Mock provider, not real research] Placeholder profile for {species}. "
+                   "Select Claude in Settings and regenerate for a real one.",
+        "adultSize": {"lengthCm": r(10, 30), "weightG": r(20, 100)}, "lifespanYears": r(5, 15),
+        "temperaturesF": {"hotSide": r(88, 92), "coldSide": r(72, 78), "night": r(65, 75), "basking": r(90, 95)},
+        "humidityPercent": r(30, 50), "uvb": "Mock: unknown.", "diet": "Mock: unknown.",
+        "feeding": [{"stage": "adult", "intervalDays": r(2, 3), "notes": "Mock value."}],
+        "droppings": {"intervalDays": r(1, 3), "notes": "Mock value."},
+        "shedding": {"type": "patches", "intervalDays": r(30, 45), "signs": "Mock value."},
+        "observableActivities": ["basking", "hiding", "exploring"],
+        "trackedStats": [{"id": "shed", "label": "Shed (Mock)", "question": "Mock check: is the animal shedding?",
+                          "options": ["not shedding", "about to shed", "shedding", "stuck shed"], "concernOptions": ["stuck shed"]}],
+        "bodyCondition": {"healthy": "Mock value.", "underweight": "Mock value.", "overweight": "Mock value."},
+        "conditions": [{"name": "Example condition (Mock)", "visibleSigns": ["mock sign"], "urgency": "monitor", "notes": "Mock value."}],
+        "hazards": [{"name": "Example hazard (Mock)", "description": "Mock value."}],
+        "husbandryNotes": "Mock value.", "confidence": "None: this is a Mock placeholder.",
+    }, {"model": "mock"})
+
+
+def ClaudeResearch(prompt, schema):
+    return _CallAi(claude_ai.Research, prompt, schema)
+
+
+def GeminiResearch(prompt, schema):
+    raise RepTrackerError("Research isn't available with Gemini yet. Select Claude (or the Mock) in Settings.")
+
+
+RESEARCHERS = {"mock": MockResearch, "claude": ClaudeResearch, "gemini": GeminiResearch}
+
+
+def _ResearchCall(fn, *args):
+    try:
+        return fn(*args)
+    except research.ResearchError as err:
+        raise RepTrackerError(str(err)) from err
+
+
+def _ProfileUsers():
+    used = {}
+    for mode in MODES:
+        for l in ListLizards(mode):
+            if l["profile"]:
+                used.setdefault(l["profile"]["slug"], []).append(f"{l['config']['name']} ({mode})")
+    return used
+
+
+def ListProfiles():
+    used = _ProfileUsers()
+    return [{**research.Summary(r), "usedBy": used.get(r["slug"], [])} for r in research.ListRecords()]
+
+
+def GetProfile(slug):
+    record = _ResearchCall(research.ReadRecord, slug)
+    if not record:
+        raise RepTrackerError("Unknown species profile.")
+    return {**record, "usedBy": _ProfileUsers().get(slug, [])}
+
+
+def CreateProfile(species, regenerate=False):
+    """Research a species with the AI provider in use: one call, then reference photos. Saved in research/<slug>/."""
+    species = _Species(species)
+    existing = research.FindRecord(species)
+    if existing and not regenerate:
+        raise RepTrackerError(f"There is already a profile for this species: {existing['profile']['commonName']}. "
+                              "Open it, or Regenerate it to replace it.")
+    if existing:
+        species = existing["species"]
+    schemaText = (PROMPTS / "profile-schema.json").read_text(encoding="utf-8")
+    prompt = FillTemplate("research.txt", {"species": species, "profile_schema": schemaText})
+    provider = CurrentProvider()
+    raw, details = RESEARCHERS[provider](prompt, json.loads(schemaText))
+    profile, notes = _ResearchCall(research.NormalizeProfile, raw)
+    record = _ResearchCall(research.NewRecord, species, profile, provider, details.get("model"))
+    if existing:
+        record["slug"] = existing["slug"]
+    record["notes"] = notes + (details.get("notes") or [])
+    record["tokens"] = details.get("tokens")
+    record["images"], imageNote = research.FetchImages(record)
+    if imageNote:
+        record["notes"].append(imageNote)
+    research.WriteRecord(record)
+    return GetProfile(record["slug"])
+
+
+def UpdateProfile(slug, profile):
+    """Save a keeper's corrections to a profile (the JSON edited on the Research tab)."""
+    record = GetProfile(slug)
+    record.pop("usedBy", None)
+    record["profile"], record["notes"] = _ResearchCall(research.NormalizeProfile, profile)
+    record["edited"] = True
+    research.WriteRecord(record)
+    return GetProfile(slug)
+
+
+def DeleteProfile(slug):
+    folder = _ResearchCall(research.Folder, slug)
+    if not (folder / "profile.json").exists():
+        raise RepTrackerError("Unknown species profile.")
+    shutil.rmtree(folder)
+    return ListProfiles()
