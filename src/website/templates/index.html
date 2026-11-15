@@ -170,6 +170,38 @@
   .form-actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
   .empty { padding: 28px 16px; text-align: center; color: var(--muted); }
 
+  /* Card sections */
+  details.section { grid-column: 1 / -1; background: var(--surface-2); border-radius: 10px; }
+  details.section > summary { list-style: none; cursor: pointer; padding: 10px 14px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  details.section > summary::-webkit-details-marker { display: none; }
+  details.section > summary::before { content: "▸"; color: var(--muted); font-size: 12px; }
+  details.section[open] > summary::before { content: "▾"; }
+  details.section > summary h2 { margin: 0; }
+  details.section > summary .sum { color: var(--muted); font-size: 13px; font-weight: 400; }
+  details.section > .body { padding: 0 14px 14px; display: grid; gap: 12px; }
+  .zones { display: grid; gap: 6px; }
+  .zone-row { display: grid; grid-template-columns: 60px 1fr; gap: 8px; align-items: center; font-size: 13px; }
+  .zone-bar { display: flex; height: 18px; border-radius: 5px; overflow: hidden; background: var(--surface); }
+  .zone-bar span { display: block; height: 100%; }
+  .zone-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+  .zone-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .move-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .move-head select { width: auto; padding: 4px 8px; }
+  .notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
+  .notes li { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: baseline; }
+  .notes time { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .notes .who { font-weight: 600; }
+  .note-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--cold); margin-right: 6px; vertical-align: 1px; }
+  .pill.info { background: color-mix(in srgb, var(--cold) 15%, transparent); color: var(--cold); }
+  .summary-notes { flex-basis: 100%; }
+  .summary-notes > summary { cursor: pointer; font-size: 14px; color: var(--cold); font-weight: 600; }
+  .summary-notes .notes { margin-top: 6px; }
+  .feed-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+  .feed-form > div { flex: 1 1 150px; } .feed-form input { width: 100%; }
+  .feed-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
+  .feed-list li { display: flex; gap: 8px; align-items: baseline; }
+  .stat dd.warn { color: var(--warn); } .stat dd.okc { color: var(--ok); }
+
   /* Research */
   .research-new { padding: 16px; display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 16px; }
   .research-new .full { flex-basis: 100%; margin: 0; }
@@ -252,7 +284,10 @@
         </svg>
         <span class="word">Rep<span>Tracker</span></span>
       </h1>
-      <span class="pill dev" id="mode-pill" hidden></span>
+      <div style="display:flex;gap:10px;align-items:center">
+        <span class="pill dev" id="mode-pill" hidden></span>
+        <form method="post" action="/logout" style="margin:0"><button class="btn ghost" type="submit" id="signout" title="Sign out">Sign out</button></form>
+      </div>
     </div>
     <nav role="tablist" aria-label="Sections">
       <button class="tab" role="tab" id="tab-dashboard" aria-controls="view-dashboard" aria-selected="true">Dashboard</button>
@@ -302,6 +337,11 @@
           <datalist id="species-options"></datalist>
           <p class="hint species-hint" id="f-species-hint"></p>
           <p class="hint species-suggest" id="f-species-suggest"></p>
+        </div>
+        <div>
+          <label for="f-sex">Sex</label>
+          <select id="f-sex" name="sex"><option value="unknown">Unknown</option><option value="female">Female</option><option value="male">Male</option></select>
+          <p class="hint" id="f-sex-hint"></p>
         </div>
         <div>
           <label for="f-width">Enclosure width (cm, optional)</label>
@@ -533,6 +573,7 @@ const fromLocalInput = v => new Date(v).getTime();
 const UNIT_LABEL = { F: "°F", C: "°C", "%RH": "% RH", "g/m3": "g/m³" };
 
 async function readResponse(res) {
+  if (res.status === 401) { location.href = "/login"; throw new Error("Signed out. Sign in again."); }
   if (res.status === 204) return null;
   const data = await res.json().catch(() => ({ error: `Server error (${res.status})` }));
   if (!res.ok) throw new Error(data.error || `Server error (${res.status})`);
@@ -586,6 +627,26 @@ function channels(config) {
 /* ================= Alerts & status ================= */
 // Live sensor alerts, from each lizard's readings and its species profile ranges (filled in by checkSensorRanges)
 const sensorAlerts = {};
+// Feeding: days since the last logged feeding (dashboard clock) against the profile's interval (adult, else the first stage)
+function feedingStatus(l, now = simNow()) {
+  const past = (l.feedings || []).filter(f => Date.parse(f.time) <= now);
+  if (!past.length) return null;
+  const last = past[past.length - 1], days = (now - Date.parse(last.time)) / DAY;
+  const stages = l.profile?.feeding || [], stage = stages.find(f => f.stage === "adult") || stages[0];
+  let state = null, label = `${days < 1 ? `${(days * 24).toFixed(0)} h` : `${days.toFixed(1)} days`} ago`;
+  if (stage) {
+    const { min, max } = stage.intervalDays;
+    state = days < min ? "fed" : days <= max ? "due" : "overdue";
+    label += ` · ${state === "fed" ? "Fed" : state === "due" ? "Due" : "Overdue"} (every ${min === max ? min : `${min}–${max}`} days)`;
+  }
+  return { last, days, state, label, stage };
+}
+// A notification's text, with species check ids shown as their profile labels
+function noteText(l, n) {
+  return n.check ? n.text.replace(/^[^:]+:/, `${checkInfo(l, n.check).label}:`) : n.text;
+}
+const fmtNoteTime = iso => new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
 // The species check for an id: from the profile, or a plain label for an analysis made before the profile changed
 function checkInfo(l, id) {
   const s = (l.profile?.trackedStats || []).find(t => t.id === id);
@@ -595,7 +656,7 @@ function checkInfo(l, id) {
 function getAlerts(lizard) {
   const out = [...(sensorAlerts[lizard.id] || [])];
   const r = lizard.latest && lizard.latest.result;
-  if (!r) return out;
+  if (!r) { const fed = feedingStatus(lizard); if (fed?.state === "overdue") out.push(`Overdue for feeding: last fed ${fed.label.split(" · ")[0]}`); return out; }
   // Species checks with a concerning answer, conditions the AI saw, and body condition
   for (const [id, value] of Object.entries(r["Species checks"] || {})) {
     const info = checkInfo(lizard, id);
@@ -607,6 +668,8 @@ function getAlerts(lizard) {
   }
   const body = (r["Body condition"] || "").toLowerCase();
   if (body && body !== "healthy" && !body.includes("see")) out.push(`Body condition: ${body}`);
+  const fed = feedingStatus(lizard);
+  if (fed?.state === "overdue") out.push(`Overdue for feeding: last fed ${fed.label.split(" · ")[0]}`);
   for (const [k, v] of Object.entries(r["Hazardous conditions"] || {})) {
     if (v === true) out.push(k);
     else if (typeof v === "string" && v.trim() && v.toLowerCase() !== "none") out.push(`${k}: ${v}`);
@@ -625,7 +688,7 @@ function getStatus(lizard) {
     const info = checkInfo(lizard, id);
     return info.options && v !== info.options[0] && v !== "can't see animal" && !info.concernOptions.includes(v);
   });
-  return watch ? "warn" : "ok";
+  return watch || feedingStatus(lizard)?.state === "due" ? "warn" : "ok";
 }
 const STATUS_LABEL = { ok: "Healthy", warn: "Watch", bad: "Alert", none: "Not analysed yet" };
 
@@ -641,7 +704,12 @@ function renderSummary() {
   el.innerHTML = `
     <span class="summary-count">${lizards.length} animal${lizards.length === 1 ? "" : "s"} · ${alerts.length ? `<span style="color:var(--bad)">${alerts.length} alert${alerts.length === 1 ? "" : "s"}</span>` : "no alerts"}</span>
     <ul class="summary-list">${lizards.map(l => { const s = getStatus(l); return `<li><a href="#lizard-${l.id}" data-goto="${l.id}"><span class="pill ${s}">${esc(l.config.name)} · ${STATUS_LABEL[s]}</span></a></li>`; }).join("")}</ul>
-    ${alerts.length ? `<ul class="summary-alerts">${alerts.map(a => `<li>${esc(a)}</li>`).join("")}</ul>` : ""}`;
+    ${alerts.length ? `<ul class="summary-alerts">${alerts.map(a => `<li>${esc(a)}</li>`).join("")}</ul>` : ""}
+    ${(() => {
+      const notes = lizards.flatMap(l => (l.notifications || []).map(n => ({ ...n, who: l.config.name, l }))).sort((a, b) => b.time.localeCompare(a.time)).slice(0, 8);
+      return notes.length ? `<details class="summary-notes"><summary>${notes.length === 8 ? "Latest notifications" : `${notes.length} notification${notes.length === 1 ? "" : "s"}`}</summary>
+        <ul class="notes">${notes.map(n => `<li><time>${esc(fmtNoteTime(n.time))}</time><span><span class="note-dot"></span><span class="who">${esc(n.who)}</span> · ${esc(noteText(n.l, n))}</span></li>`).join("")}</ul></details>` : "";
+    })()}`;
 }
 
 /* ================= Lizard blocks ================= */
@@ -659,6 +727,7 @@ function aiStatsHtml(l) {
     + cell("Body condition", body, body && !["healthy", "can't see animal"].includes(body))
     + cell("Eating", r?.["Eating seen"]) + cell("Droppings", r?.["Droppings seen"]) + cell("Visible", r?.["Animal visible"])
     + cell("Food in bowl", r?.["Food in bowl"])
+    + (() => { const f = feedingStatus(l); return f ? `<div class="stat"><dt>Last fed</dt><dd class="${f.state === "overdue" ? "out" : f.state === "due" ? "warn" : f.state === "fed" ? "okc" : ""}">${esc(f.label)}</dd></div>` : ""; })()
     + ids.map(id => { const info = checkInfo(l, id), v = r?.["Species checks"]?.[id]; return cell(info.label, v, info.concernOptions.includes(v)); }).join("")
     + ((r?.["Conditions seen"] || []).length ? `<div class="stat" style="grid-column:1/-1"><dt>Conditions seen</dt><dd class="out">${esc(r["Conditions seen"].map(c => c.name).join(", "))}</dd></div>` : "");
 }
@@ -711,6 +780,113 @@ function toggleExpand(id, open = !expanded.has(id)) {
   if (l) replaceLizard(l);
 }
 
+// Collapsible card sections; which are open is remembered per animal in this browser
+let openSections = {};
+try { openSections = JSON.parse(localStorage.getItem("reptracker.sections") || "{}"); } catch {}
+function section(l, key, title, summary, body) {
+  const open = (openSections[l.id] || []).includes(key);
+  return `<details class="section" data-section="${key}" ${open ? "open" : ""}><summary><h2>${title}</h2><span class="sum">${summary}</span></summary><div class="body">${body}</div></details>`;
+}
+document.addEventListener("toggle", e => {
+  const d = e.target; if (!d.matches?.("details.section")) return;
+  const id = d.closest(".lizard")?.dataset.id; if (!id) return;
+  const set = new Set(openSections[id] || []); d.open ? set.add(d.dataset.section) : set.delete(d.dataset.section);
+  openSections[id] = [...set];
+  try { localStorage.setItem("reptracker.sections", JSON.stringify(openSections)); } catch {}
+  if (d.open && d.dataset.section === "movement") renderMovement(d.closest(".lizard"), lizards.find(x => x.id === id));
+}, true);
+
+function feedingBody(l) {
+  const list = [...(l.feedings || [])].reverse().slice(0, 15);
+  const canLog = settings.devMode && l.profile;
+  const f = feedingStatus(l);
+  return `${f?.stage ? `<p class="hint" style="margin:0">${esc(l.profile.commonName)} (${esc(f.stage.stage)}): every ${f.stage.intervalDays.min}–${f.stage.intervalDays.max} days${f.stage.notes ? `. ${esc(f.stage.notes)}` : ""}</p>` : ""}
+    ${list.length ? `<ul class="feed-list">${list.map(x => `<li><time class="hint" style="margin:0">${esc(fmtNoteTime(x.time))}</time><span><strong>${esc(x.food)}</strong>${x.amount ? ` · ${esc(x.amount)}` : ""}${x.notes ? ` · ${esc(x.notes)}` : ""}</span>
+      ${canLog ? `<button class="file-del" type="button" data-delete-feeding="${esc(x.id)}" title="Delete this feeding" aria-label="Delete this feeding">×</button>` : ""}</li>`).join("")}</ul>` : `<p class="hint" style="margin:0">No feedings logged yet.</p>`}
+    ${canLog ? `<form class="feed-form" data-action="feed">
+        <div><label>When</label><input type="datetime-local" step="60" name="time" value="${toLocalInput(simNow())}" required></div>
+        <div><label>Food</label><input name="food" placeholder="e.g. 4 crickets" maxlength="80" required></div>
+        <div><label>Amount (optional)</label><input name="amount" placeholder="e.g. dusted with calcium" maxlength="40"></div>
+        <div><label>Notes (optional)</label><input name="notes" maxlength="200"></div>
+        <button class="btn primary" type="submit">Log feeding</button>
+      </form><p class="error" data-feed-error hidden></p>`
+      : `<p class="hint" style="margin:0">${settings.devMode ? "Create a species profile on the Research tab to log feedings." : "Feedings are logged in dev mode (Settings)."}</p>`}`;
+}
+
+// Movement: all analysed positions of an animal, from the server; zones, movement per interval, by hour of day
+const movementCache = {};
+const DAY_START_H = 7, DAY_END_H = 19;     // day = 7 AM to 7 PM, local time
+function movementSummary(l) {
+  const md = l.latest?.result?.["Movement Data"];
+  const seen = (md || []).map(m => m.position ?? m.position_cm).filter(v => v != null);
+  if (!seen.length) return "no positions yet";
+  let total = 0; for (let i = 1; i < seen.length; i++) total += Math.abs(seen[i] - seen[i - 1]);
+  return `latest analysis: moved ${total.toFixed(0)} ${positionScale(l.config).short} over ${seen.length} sightings`;
+}
+function zoneOf(x, max, hotSide) {
+  const third = x / max < 1 / 3 ? "left" : x / max > 2 / 3 ? "right" : "middle";
+  return third === "middle" ? "middle" : third === hotSide ? "hot" : "cold";
+}
+function barChart({ bars, unit, height = 150, width = 1040, color = "var(--line)" }) {
+  const L = 40, R = 10, T = 8, B = 30, max = Math.max(1, ...bars.map(b => b.value));
+  const bw = (width - L - R) / Math.max(1, bars.length), every = Math.ceil(bars.length / 12);
+  let g = "";
+  for (let i = 0; i <= 4; i++) { const v = max * i / 4, y = T + (1 - i / 4) * (height - T - B);
+    g += `<line x1="${L}" x2="${width - R}" y1="${y}" y2="${y}" stroke="var(--grid)"/><text x="${L - 6}" y="${y + 4}" text-anchor="end">${+v.toFixed(v < 10 ? 1 : 0)}</text>`; }
+  bars.forEach((b, i) => {
+    const h = (b.value / max) * (height - T - B), x = L + i * bw;
+    g += `<rect x="${(x + 1).toFixed(1)}" y="${(height - B - h).toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${h.toFixed(1)}" fill="${b.color || color}" rx="2"><title>${esc(b.title || `${b.label}: ${b.value.toFixed(1)} ${unit}`)}</title></rect>`;
+    if (i % every === 0) g += `<text x="${(x + bw / 2).toFixed(1)}" y="${height - 12}" text-anchor="middle">${esc(b.label)}</text>`;
+  });
+  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Bar chart, ${esc(unit)}">${g}</svg>`;
+}
+async function renderMovement(card, l) {
+  const box = card?.querySelector("[data-movement]"); if (!box || !l) return;
+  const key = `${mode()}/${l.id}/${l.latest?.bundleId || "none"}`;
+  if (!movementCache[key]) movementCache[key] = api("GET", `/lizards/${l.id}/movement`).catch(x => ({ error: x.message }));
+  const data = await movementCache[key];
+  if (data.error) { box.innerHTML = `<p class="error">${esc(data.error)}</p>`; return; }
+  const pts = data.points.map(p => ({ ...p, ms: Date.parse(p.t) }));
+  if (!pts.length) { box.innerHTML = `<p class="hint" style="margin:0">No analyses yet. Movement stats appear after the first one.</p>`; return; }
+  const unit = data.unit, interval = +(box.dataset.interval || 15);
+  // time per zone, all / day / night
+  const isDay = ms => { const h = new Date(ms).getHours(); return h >= DAY_START_H && h < DAY_END_H; };
+  const zoneTime = filter => { const z = { hot: 0, middle: 0, cold: 0, unseen: 0 };
+    for (const p of pts.filter(filter)) p.p == null ? z.unseen += p.w : z[zoneOf(p.p, data.positionMax, data.hotSide)] += p.w; return z; };
+  const fmtH = sec => sec >= 3600 ? `${(sec / 3600).toFixed(1)} h` : `${Math.round(sec / 60)} min`;
+  const zoneRow = (label, z) => { const seen = z.hot + z.middle + z.cold;
+    if (!seen) return `<div class="zone-row"><span>${label}</span><span class="hint" style="margin:0">no sightings</span></div>`;
+    const pct = v => (v / seen * 100);
+    return `<div class="zone-row"><span>${label}</span><div><div class="zone-bar" title="Hot ${fmtH(z.hot)} · Middle ${fmtH(z.middle)} · Cold ${fmtH(z.cold)} · not visible ${fmtH(z.unseen)}">
+      <span style="width:${pct(z.hot)}%;background:var(--hot)"></span><span style="width:${pct(z.middle)}%;background:var(--muted);opacity:.5"></span><span style="width:${pct(z.cold)}%;background:var(--cold)"></span></div>
+      <span class="hint" style="margin:0">Hot ${pct(z.hot).toFixed(0)}% (${fmtH(z.hot)}) · Middle ${pct(z.middle).toFixed(0)}% · Cold ${pct(z.cold).toFixed(0)}% (${fmtH(z.cold)})${z.unseen ? ` · not visible ${fmtH(z.unseen)}` : ""}</span></div></div>`; };
+  // movement per interval: |position change| between consecutive sightings, credited to the later one's interval
+  const moves = []; let prev = null;
+  for (const p of pts) { if (p.p == null) continue; if (prev && p.ms - prev.ms <= 3 * p.w * 1000 + 1000) moves.push({ ms: p.ms, d: Math.abs(p.p - prev.p) }); prev = p; }
+  const step = interval * MIN, first = Math.floor(pts[0].ms / step) * step, last = Math.floor(pts[pts.length - 1].ms / step) * step;
+  const nBuckets = Math.min(96, Math.round((last - first) / step) + 1), start = last - (nBuckets - 1) * step;
+  const buckets = Array.from({ length: nBuckets }, (_, i) => ({ ms: start + i * step, value: 0 }));
+  for (const m of moves) { const i = Math.floor((m.ms - start) / step); if (i >= 0 && i < nBuckets) buckets[i].value += m.d; }
+  const intervalBars = buckets.map(b => ({ label: new Date(b.ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), value: b.value,
+    title: `${fmtNoteTime(b.ms)}: ${b.value.toFixed(1)} ${unit}` }));
+  // by hour of day: average movement per observed hour
+  const byHour = Array.from({ length: 24 }, () => ({ d: 0, sec: 0 }));
+  for (const p of pts) byHour[new Date(p.ms).getHours()].sec += p.w;
+  for (const m of moves) byHour[new Date(m.ms).getHours()].d += m.d;
+  const hourBars = byHour.map((h, i) => ({ label: `${i}`, value: h.sec ? h.d / (h.sec / 3600) : 0, color: i >= DAY_START_H && i < DAY_END_H ? "var(--warn)" : "var(--cold)",
+    title: h.sec ? `${i}:00–${i + 1}:00: ${(h.d / (h.sec / 3600)).toFixed(1)} ${unit} per hour (${fmtH(h.sec)} observed)` : `${i}:00: not observed` }));
+  const totalMove = moves.reduce((a, m) => a + m.d, 0), observed = pts.reduce((a, p) => a + p.w, 0);
+  box.innerHTML = `
+    <div><h3>Time on each side</h3><div class="zones">${zoneRow("All", zoneTime(() => true))}${zoneRow("Day", zoneTime(p => isDay(p.ms)))}${zoneRow("Night", zoneTime(p => !isDay(p.ms)))}</div>
+      <div class="zone-legend"><span><i style="background:var(--hot)"></i>hot third (${esc(data.hotSide)})</span><span><i style="background:var(--muted);opacity:.5"></i>middle third</span><span><i style="background:var(--cold)"></i>cold third</span><span>Day: ${DAY_START_H}:00–${DAY_END_H}:00${l.profile?.activityPattern ? ` · ${esc(l.profile.commonName)} is ${esc(l.profile.activityPattern)}` : ""}</span></div></div>
+    <div><div class="move-head"><h3 style="margin:0">Movement per interval</h3>
+      <label class="hint" style="margin:0">Interval <select data-move-interval>${[5, 10, 15, 30, 60].map(m => `<option value="${m}" ${m === interval ? "selected" : ""}>${m} min</option>`).join("")}</select></label></div>
+      <div class="chart">${barChart({ bars: intervalBars, unit })}</div>
+      <p class="hint" style="margin:0">Total ${totalMove.toFixed(0)} ${unit} over ${fmtH(observed)} analysed (${pts.length} images). Distance is between consecutive sightings, in ${esc(unit === "cm" ? "cm" : "% of the video width")}.</p></div>
+    <div><h3>Activity by time of day</h3><div class="chart">${barChart({ bars: hourBars, unit: `${unit}/h`, height: 130 })}</div>
+      <p class="hint" style="margin:0">Average movement per hour of the day (local time), over every analysis; orange bars are day, blue are night. Hours never analysed are empty.</p></div>`;
+}
+
 function renderLizard(l) {
   if (!expanded.has(l.id)) return renderCompactLizard(l);
   const c = l.config, s = getStatus(l), r = l.latest ? l.latest.result : {};
@@ -720,7 +896,7 @@ function renderLizard(l) {
   return `
   <article class="card lizard expanded" id="lizard-${l.id}" data-id="${l.id}">
     <div class="lizard-head full">
-      <div><h3 style="display:inline;margin:0"><button class="lizard-name open" type="button" data-action="open" aria-expanded="true" title="Collapse ${esc(c.name)}">${esc(c.name)}<span class="chev" aria-hidden="true">▾</span></button></h3><span class="lizard-meta">${esc(c.species)} · ${esc(c.camera.view)} camera · ${c.enclosureWidthCm ? `${c.enclosureWidthCm} cm wide` : "position in % of video width"}</span></div>
+      <div><h3 style="display:inline;margin:0"><button class="lizard-name open" type="button" data-action="open" aria-expanded="true" title="Collapse ${esc(c.name)}">${esc(c.name)}<span class="chev" aria-hidden="true">▾</span></button></h3><span class="lizard-meta">${esc(c.species)}${c.sex && c.sex !== "unknown" ? ` · ${esc(c.sex)}` : ""} · ${esc(c.camera.view)} camera · ${c.enclosureWidthCm ? `${c.enclosureWidthCm} cm wide` : "position in % of video width"}</span></div>
       <div style="display:flex;gap:8px;align-items:center">
         <span class="pill ${s}">${STATUS_LABEL[s]}</span>
         <button class="btn ghost" type="button" data-action="edit">Edit</button>
@@ -732,9 +908,8 @@ function renderLizard(l) {
       <h2>Stats</h2>
       <dl class="stats">
         ${aiStatsHtml(l)}
-        ${sensorStats}
       </dl>
-      <p class="hint">Temperature and humidity are live sensor readings; the rest is from the latest AI analysis${l.profile ? `, with checks from the ${esc(l.profile.commonName)} profile` : ". Create a species profile on the Research tab for species-specific checks"}.</p>
+      <p class="hint">From the latest AI analysis${l.profile ? `, with checks from the ${esc(l.profile.commonName)} profile` : ". Create a species profile on the Research tab for species-specific checks"}. Live temperature and humidity are under Environment.</p>
     </div>
     <div class="panel analysis"><h2>AI analysis</h2>${renderAnalysis(l)}
       <form class="analyze-row" data-action="analyze">
@@ -752,18 +927,20 @@ function renderLizard(l) {
         <button class="btn primary" type="submit">Ask</button>
       </form>
     </div>
-    <div class="panel full">
-      <h2>Sensors</h2>
+    ${section(l, "environment", "Environment", `<span data-env-summary></span>`, `
+      <dl class="stats">${sensorStats}</dl>
       <div class="charts">
         <div class="chart" data-chart="temperature"></div>
         <div class="chart" data-chart="humidity"></div>
       </div>
-      <p class="hint" data-window></p>
-    </div>
-    <div class="panel full">
-      <h2>Position</h2>
-      <div class="chart">${renderPositionChart(l)}</div>
-    </div>
+      <p class="hint" style="margin:0" data-window></p>`)}
+    ${section(l, "movement", "Movement", movementSummary(l), `
+      <div><h3>Position in the latest analysis</h3><div class="chart">${renderPositionChart(l)}</div></div>
+      <div data-movement><p class="hint">Loading movement…</p></div>`)}
+    ${section(l, "notifications", "Notifications", (l.notifications || []).length ? `${l.notifications.length} · latest: ${esc(noteText(l, l.notifications[0]))}` : "none yet", `
+      ${(l.notifications || []).length ? `<ul class="notes">${l.notifications.slice(0, 20).map(n => `<li><time>${esc(fmtNoteTime(n.time))}</time><span><span class="note-dot"></span>${esc(noteText(l, n))}</span></li>`).join("")}</ul>`
+        : `<p class="hint" style="margin:0">Interesting moments that are neither good nor bad show here: things the AI noticed, eating, droppings, changes between analyses (activity, ${l.profile?.trackedStats?.length ? l.profile.trackedStats.map(t => t.label.toLowerCase()).join(", ") : "shed"}), and feedings.</p>`}`)}
+    ${section(l, "feeding", "Feeding", feedingStatus(l) ? esc(`Last fed ${feedingStatus(l).label}`) : "no feedings logged", feedingBody(l))}
     ${settings.devMode ? `
     <div class="devpanel full">
       <h2>Dev · prompts for a time range</h2>
@@ -786,24 +963,28 @@ function renderLizard(l) {
   </article>`;
 }
 
+function drawOpenMovement() {
+  document.querySelectorAll(".lizard.expanded details[data-section='movement'][open]").forEach(d => renderMovement(d.closest(".lizard"), lizards.find(x => x.id === d.closest(".lizard").dataset.id)));
+}
 function renderLizards() {
   const el = $("#lizards");
   el.innerHTML = lizards.length ? lizards.map(renderLizard).join("") : `<div class="card empty">No animals yet.</div>`;
   renderSummary();
   for (const l of lizards) channels(l.config).forEach(ch => loadSeries(ch.series));
-  tick(true);
+  tick(true); drawOpenMovement();
 }
 function replaceLizard(updated) {
   lizards = lizards.map(l => l.id === updated.id ? updated : l);
   const tpl = document.createElement("template");
   tpl.innerHTML = renderLizard(updated).trim();
   document.getElementById(`lizard-${updated.id}`).replaceWith(tpl.content.firstElementChild);
-  renderSummary(); tick(true);
+  renderSummary(); tick(true); drawOpenMovement();
 }
 
 /* ================= Charts (inline SVG) ================= */
 // series: [{name, color, points: [[x, y or null]], dashed?}]; markers: x values to tick along the bottom (e.g. "not visible")
-function lineChart({ series, xMin, xMax, yMin, yMax, xFmt, yLabel, height = 170, yTicks, width = 520, markers = [], markerTitle = "" }) {
+// guides: dotted horizontal lines [{y, color, title}], e.g. the species profile's range
+function lineChart({ series, xMin, xMax, yMin, yMax, xFmt, yLabel, height = 170, yTicks, width = 520, markers = [], markerTitle = "", guides = [] }) {
   const W = width, H = height, L = 40, R = 10, T = 8, B = 24;
   if (yMax === yMin) { yMax += 1; yMin -= 1; }
   const sx = x => L + (x - xMin) / (xMax - xMin || 1) * (W - L - R);
@@ -812,6 +993,7 @@ function lineChart({ series, xMin, xMax, yMin, yMax, xFmt, yLabel, height = 170,
   const ticks = yTicks || [0, 1, 2, 3, 4].map(i => yMin + (yMax - yMin) * i / 4);
   for (const v of ticks) g += `<line x1="${L}" x2="${W - R}" y1="${sy(v)}" y2="${sy(v)}" stroke="var(--grid)"/><text x="${L - 6}" y="${sy(v) + 4}" text-anchor="end">${+v.toFixed(1)}</text>`;
   for (let i = 0; i <= 4; i++) { const x = xMin + (xMax - xMin) * i / 4; g += `<text x="${sx(x)}" y="${H - 6}" text-anchor="${i === 0 ? "start" : i === 4 ? "end" : "middle"}">${esc(xFmt(x))}</text>`; }
+  for (const gd of guides) g += `<line x1="${L}" x2="${W - R}" y1="${sy(gd.y).toFixed(1)}" y2="${sy(gd.y).toFixed(1)}" stroke="${gd.color}" stroke-width="1.5" stroke-dasharray="2 4" opacity="0.9"><title>${esc(gd.title)}</title></line>`;
   for (const s of series) {
     let d = "", pen = false;
     for (const [x, y] of s.points) { if (y == null) { pen = false; continue; } d += `${pen ? "L" : "M"}${sx(x).toFixed(1)},${sy(y).toFixed(1)}`; pen = true; }
@@ -847,14 +1029,27 @@ async function renderSensorCharts(card, l, now) {
       color: ch.key === "hot" ? "var(--hot)" : "var(--cold)",
       points: Array.from({ length: N + 1 }, (_, k) => { const x = start + (now - start) * k / N; return [x, readSeries(s, (x - created) / 1000)]; })
     }));
-    const ys = series.flatMap(s => s.points.map(p => p[1]));
+    // the species profile's range for each line, dotted, in that sensor's unit
+    const guides = [];
+    chs.forEach(ch => {
+      if (ch.kind !== kind) return;
+      const r = rangeFor(l, ch); if (!r) return;
+      const color = ch.key === "hot" ? "var(--hot)" : "var(--cold)";
+      const what = kind === "humidity" ? "humidity range (enclosure)" : `${ch.key} side range`;
+      if (kind === "humidity" && guides.length) return;      // one shared humidity range
+      const gcolor = kind === "humidity" ? "var(--muted)" : color;
+      guides.push({ y: r.min, color: gcolor, title: `${l.profile.commonName} ${what}: min ${r.min.toFixed(1)} ${UNIT_LABEL[ch.unit]}` },
+                  { y: r.max, color: gcolor, title: `${l.profile.commonName} ${what}: max ${r.max.toFixed(1)} ${UNIT_LABEL[ch.unit]}` });
+    });
+    const ys = [...series.flatMap(s => s.points.map(p => p[1])), ...guides.map(gd => gd.y)];
     const pad = (Math.max(...ys) - Math.min(...ys)) * .1 || 1;
     const el = card.querySelector(`[data-chart="${kind}"]`);
     if (!el) return;
     el.innerHTML =
       `<h3>${kind === "temperature" ? "Temperature" : "Humidity"}</h3>
        <div class="legend">${series.map(s => `<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join("")}</div>` +
-      lineChart({ series, xMin: start, xMax: now, yMin: Math.min(...ys) - pad, yMax: Math.max(...ys) + pad, xFmt, yLabel: kind });
+      lineChart({ series, xMin: start, xMax: now, yMin: Math.min(...ys) - pad, yMax: Math.max(...ys) + pad, xFmt, yLabel: kind, guides })
+      + (guides.length ? `<p class="hint" style="margin:2px 0 0">Dotted: the ${esc(l.profile.commonName)} profile's ${kind === "temperature" ? "hot and cold side ranges" : "humidity range"}.</p>` : "");
   }
   const h = (now - start) / HOUR;
   winEl.textContent = `Window: ${h < 48 ? h.toFixed(1) + " h" : (h / 24).toFixed(1) + " days"} (grows to 5 days, then slides).`;
@@ -896,6 +1091,17 @@ function renderPositionChart(l) {
     xFmt: i => labelToLocal((md[Math.round(i)] || {}).time),
     yLabel: `Position, ${ps.unit}`
   }) + `<p class="hint" style="margin:2px 0 0">${ps.unit} (0 = left, ${W} = right; hot side ${esc(l.config.sensors.hotSide)}) · one point per image, local time${seen < md.length ? ` · seen in ${seen} of ${md.length} images. Dashed: not visible in between (behind decor or out of frame); ticks on the bottom mark those images` : ""}</p>`;
+}
+
+// The Environment section's one-line summary, from the live readings
+async function envSummary(card, l, offsetS) {
+  const el = card.querySelector("[data-env-summary]"); if (!el) return;
+  if (offsetS < 0) { el.textContent = "sensors not started yet"; return; }
+  const chs = channels(l.config);
+  let data; try { data = await Promise.all(chs.map(ch => loadSeries(ch.series))); } catch { return; }
+  const v = chs.map((ch, i) => `${ch.key === "hot" ? "Hot" : "Cold"} ${ch.kind === "temperature" ? "" : "humidity "}${readSeries(data[i], offsetS).toFixed(1)} ${UNIT_LABEL[ch.unit]}`);
+  const bad = (sensorAlerts[l.id] || []).length;
+  el.textContent = v.join(" · ") + (bad ? ` · ${bad} out of range` : "");
 }
 
 /* Sensor readings against the species profile: out-of-range values turn red and become alerts. */
@@ -965,7 +1171,7 @@ function tick(forceCharts) {
       if (offsetS < 0) { el.textContent = "—"; return; }
       loadSeries(ch.series).then(s => { el.textContent = `${readSeries(s, offsetS).toFixed(1)} ${UNIT_LABEL[ch.unit]}`; }).catch(() => { el.textContent = "missing file"; });
     });
-    if (drawCharts) { renderSensorCharts(card, l, now); checkSensorRanges(l, now); }
+    if (drawCharts) { renderSensorCharts(card, l, now); checkSensorRanges(l, now); envSummary(card, l, offsetS); }
     followClockRange(card, now);
   }
 }
@@ -1161,6 +1367,7 @@ function speciesHint() {
   const hint = $("#f-species-hint");
   if (!slugify(addForm.elements.species.value)) { hint.textContent = "Type it in plain English."; return; }
   const match = findProfile(addForm.elements.species.value);
+  $("#f-sex-hint").textContent = match ? "Sex-specific notes and conditions from the profile are used for this animal." : "";
   hint.innerHTML = match ? `Profile: <strong>${esc(match.commonName)}</strong> <em>${esc(match.scientificName)}</em>. Used for alerts and analyses.`
                          : `No profile yet. Saving researches this species first (one call to ${esc(ai.provider || "the AI provider")}), then adds the animal.`;
 }
@@ -1196,7 +1403,7 @@ function openEdit(l) {
   closeAdd(); fillMediaSelects();
   editingId = l.id;
   $("#form-title").textContent = `Edit ${c.name}`; $("#form-submit").textContent = "Save changes";
-  f.name.value = c.name; f.species.value = c.species; f.width.value = c.enclosureWidthCm ?? ""; speciesHint();
+  f.name.value = c.name; f.species.value = c.species; f.sex.value = c.sex || "unknown"; f.width.value = c.enclosureWidthCm ?? ""; speciesHint();
   renderSuggestions(f.species, $("#f-species-suggest"));
   f.view.value = c.camera.view; f.video.value = c.camera.video;
   f.hotSide.value = c.sensors.hotSide; $("#f-coldside").textContent = c.sensors.hotSide === "left" ? "Right" : "Left";
@@ -1234,7 +1441,7 @@ addForm.addEventListener("submit", async e => {
   skipResearch = false;
   submit.disabled = false; submit.textContent = label;
   const body = {
-    name: f.name.value.trim(), species: f.species.value.trim(),
+    name: f.name.value.trim(), species: f.species.value.trim(), sex: f.sex.value,
     enclosureWidthCm: f.width.value.trim() === "" ? null : +f.width.value,
     createdAt: new Date(simNow()).toISOString(),   // ignored when editing: the lizard keeps its start time
     camera: { view: f.view.value, video: f.video.value },
@@ -1257,6 +1464,31 @@ addForm.addEventListener("submit", async e => {
     lizards.push(created); closeAdd(); renderLizards(); renderSettings();
     document.getElementById(`lizard-${created.id}`).scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (x) { addErr.textContent = x.message; addErr.hidden = false; }
+});
+
+$("#lizards").addEventListener("change", e => {
+  const sel = e.target.closest("[data-move-interval]"); if (!sel) return;
+  const card = sel.closest(".lizard"), box = card.querySelector("[data-movement]");
+  box.dataset.interval = sel.value; renderMovement(card, lizards.find(x => x.id === card.dataset.id));
+});
+$("#lizards").addEventListener("submit", async e => {
+  const form = e.target; if (!form.matches("[data-action='feed']")) return;
+  e.preventDefault();
+  const card = form.closest(".lizard"), id = card.dataset.id, err = card.querySelector("[data-feed-error]");
+  err.hidden = true;
+  try {
+    const feedings = await api("POST", `/lizards/${id}/feedings`, { time: new Date(fromLocalInput(form.time.value)).toISOString(),
+      food: form.food.value, amount: form.amount.value, notes: form.notes.value });
+    const l = lizards.find(x => x.id === id);
+    await loadMode(true);      // notifications and status include the new feeding
+  } catch (x) { err.textContent = x.message; err.hidden = false; }
+});
+$("#lizards").addEventListener("click", async e => {
+  const del = e.target.closest("[data-delete-feeding]"); if (!del) return;
+  if (!confirm("Delete this feeding from the log?")) return;
+  const id = del.closest(".lizard").dataset.id;
+  await api("DELETE", `/lizards/${id}/feedings/${del.dataset.deleteFeeding}`);
+  await loadMode(true);
 });
 
 addErr.addEventListener("click", e => {
@@ -1600,6 +1832,8 @@ for (const [inputSel, boxSel] of [["#research-species", "#research-suggest"], ["
 $("#research-species").addEventListener("input", e => renderSuggestions(e.target, $("#research-suggest")));
 
 /* ================= Research: species profiles ================= */
+let sensorPatterns = {};    // research.SENSOR_PATTERNS, for the dev-mode generator
+fetch("/api/research-patterns").then(r => r.json()).then(p => { sensorPatterns = p; }).catch(() => {});
 let profiles = [];          // summaries: {slug, species, commonName, scientificName, animalType, image, usedBy, ...}
 let openProfile = null;     // slug shown below the list
 const slugify = t => String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
@@ -1661,8 +1895,20 @@ function renderProfile(rec) {
     <div><h2>Conditions to watch for</h2><table class="ptable"><thead><tr><th>Condition</th><th>Visible signs</th><th>Urgency</th><th>Notes</th></tr></thead><tbody>
       ${p.conditions.map(c => `<tr><td><strong>${esc(c.name)}</strong></td><td><ul>${c.visibleSigns.map(v => `<li>${esc(v)}</li>`).join("")}</ul></td>
         <td><span class="pill ${URGENCY[c.urgency] || "none"}">${esc(c.urgency)}</span></td><td>${esc(c.notes)}</td></tr>`).join("")}</tbody></table></div>
+    ${p.sexNotes ? `<div><h2>Males and females</h2>
+      <p style="margin:0 0 6px"><strong>Telling them apart:</strong> ${esc(p.sexNotes.howToTell)}</p>
+      <dl class="facts">${["female", "male"].map(sx => `<div><dt>${sx === "female" ? "Females" : "Males"}</dt><dd style="font-weight:400">${esc(p.sexNotes[sx]?.notes || "—")}
+        ${(p.sexNotes[sx]?.conditions || []).length ? `<ul style="margin:6px 0 0;padding-left:18px">${p.sexNotes[sx].conditions.map(c => `<li><strong>${esc(c.name)}</strong> <span class="pill ${URGENCY[c.urgency] || "none"}">${esc(c.urgency)}</span>: ${esc(c.visibleSigns.join("; "))}</li>`).join("")}</ul>` : ""}</dd></div>`).join("")}</dl></div>`
+      : `<p class="caution" style="margin:0">No male/female notes in this profile (made before they existed). Regenerate it to get them.</p>`}
     <div><h2>Hazards</h2><table class="ptable"><tbody>${p.hazards.map(h => `<tr><td><strong>${esc(h.name)}</strong></td><td>${esc(h.description)}</td></tr>`).join("")}</tbody></table></div>
     ${p.husbandryNotes ? `<div><h2>Notes</h2><p style="margin:0">${esc(p.husbandryNotes)}</p></div>` : ""}
+    ${settings.devMode ? `<div class="devpanel"><h2>Dev · sensor data from this profile</h2>
+      <div class="range-row" style="align-items:end">
+        <div style="flex:1 1 280px"><label for="gen-pattern">Pattern</label><select id="gen-pattern" data-gen-pattern>${Object.entries(sensorPatterns).map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join("")}</select></div>
+        <button class="btn dev" type="button" data-profile-action="generate-sensors">Generate sensor files (${esc(mode())} mode)</button>
+      </div>
+      <p class="hint" style="margin:6px 0 0">Writes 4 files for 7 days at 5-minute steps, from this profile's ranges: hot and cold side temperature (°F) and humidity (% RH). Pick them for an animal in the add/edit form; its graphs show the ranges as dotted lines.</p>
+      <p class="ok-msg" data-gen-ok hidden></p></div>` : ""}
     <div class="caution"><strong>Confidence:</strong> ${esc(p.confidence)} Dashboard alerts use these ranges; check them against a care sheet or a vet.</div>
     <p class="hint" style="margin:0">Typed as "${esc(rec.species)}" · ${esc(rec.provider || "?")}${rec.model ? ` (${esc(rec.model)})` : ""} · ${esc(fmtShort(Date.parse(rec.createdAt)))}
       ${rec.tokens ? ` · ${rec.tokens.total.toLocaleString()} tokens` : ""} · used by ${rec.usedBy.length ? esc(rec.usedBy.join(", ")) : "no animals yet"} · research/${esc(rec.slug)}/profile.json</p>
@@ -1717,6 +1963,19 @@ $("#profile-view").addEventListener("click", async e => {
     try { openRecord = await researchApi("PUT", `/${openRecord.slug}`, { profile }); view.innerHTML = renderProfile(openRecord); await loadProfiles(); await loadMode(); }
     catch (x) { err.textContent = x.message; err.hidden = false; }
   }
+  if (act === "generate-sensors") {
+    const pattern = view.querySelector("[data-gen-pattern]").value, ok = view.querySelector("[data-gen-ok]");
+    btn.disabled = true;
+    try {
+      const res = await readResponse(await fetch(`/api/${mode()}/research/${openRecord.slug}/sensors`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pattern }) }));
+      media = res.media; Object.keys(seriesCache).forEach(k => delete seriesCache[k]);
+      ok.textContent = `Made ${res.names.join(", ")} in ${mode()} mode.`; ok.hidden = false;
+      renderSettings();
+    } catch (x) { err.textContent = x.message; err.hidden = false; }
+    btn.disabled = false;
+    return;
+  }
   if (act === "regenerate") {
     if (!confirm(`Replace the ${openRecord.profile.commonName} profile with a new one from the AI? Edits to this one are lost.`)) return;
     runResearch(openRecord.species, true, btn);
@@ -1730,9 +1989,9 @@ $("#profile-view").addEventListener("click", async e => {
 });
 
 /* Load the current mode's media and lizards */
-async function loadMode() {
+async function loadMode(keepOpen = false) {
   $("#load-error").hidden = true;
-  closeAdd();
+  if (!keepOpen) closeAdd();
   try {
     [media, lizards] = await Promise.all([api("GET", "/media"), api("GET", "/lizards")]);
   } catch (x) {
@@ -1740,10 +1999,11 @@ async function loadMode() {
     $("#load-error").textContent = `Couldn't reach the RepTracker server: ${x.message}. Run app.py and open http://127.0.0.1:5000.`;
     $("#load-error").hidden = false;
   }
-  expanded.clear();
+  if (!keepOpen) expanded.clear();
   polling.last = {};     // new set of lizards: wait for the next interval mark
   renderDevBar(); renderSettings(); renderLizards(); renderPolling();
 }
+fetch("/api/me").then(r => r.json()).then(me => { if (me.user) $("#signout").textContent = `Sign out (${me.user})`; }).catch(() => {});
 loadMode();
 loadAi();
 loadProfiles();

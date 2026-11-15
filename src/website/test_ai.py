@@ -29,7 +29,7 @@ LABELS = ["2026-11-12 00:00 UTC", "2026-11-12 00:01 UTC", "2026-11-12 00:02 UTC"
 def GoodReply():
     return {
         "Animal visible": "yes", "Current activity": "basking", "Body condition": "healthy", "Eating seen": "not eating",
-        "Droppings seen": "none seen", "Food in bowl": "false", "Species checks": {"shed": "not shedding"}, "Conditions seen": [],
+        "Droppings seen": "none seen", "Food in bowl": "false", "Species checks": {"shed": "not shedding"}, "Conditions seen": [], "Notable moments": [],
         "Hazardous conditions": {"Improper substrate": False, "Unsafe lighting": False, "Temperature too high": False,
                                  "Temperature too low": False, "Humidity too high": False, "Other": "none"},
         "Movement Data": [{"time": label, "position": 10.0 * (i + 1)} for i, label in enumerate(LABELS)],

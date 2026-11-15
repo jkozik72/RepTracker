@@ -45,3 +45,8 @@ src/website/data/claude-settings.json
 
 # Species reference photos (Wikimedia Commons), downloaded again when a profile is created
 src/website/research/*/images/
+
+# Sign-in: the account (password hash), the cookie signing key, and the LAN certificate
+src/website/data/auth.json
+src/website/data/secret_key
+src/website/data/tls/

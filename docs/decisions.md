@@ -63,3 +63,11 @@ Entry format:
 - **Sources:** `docs/notes/2026-11-15-species-checks-chat.md`; `docs/notes/2026-11-15-species-profiles-chat.md`
 - **Replaces:** none
 
+## D7 (2026-11-15): One sign-in account, and HTTPS with a self-signed certificate on the LAN
+- **Context:** The team wants to open RepTracker from other devices on the local network without it being easy to break into: the API key, the animals' data and the camera videos are behind it.
+- **Options:** A: no sign-in, local only. B: a sign-in over plain HTTP. C: a sign-in, and HTTPS with a self-signed certificate when served on the LAN. D: user accounts with roles.
+- **Chose:** C. The first visit creates the only account (username, password of 10+ characters, stored as a salted scrypt hash); after that every page, API call, video and photo needs a signed session cookie (HttpOnly, SameSite=Strict, Secure on HTTPS) tied to the account's id. Repeated wrong passwords lock that address out, doubling from 30 s to 15 min. `python app.py --lan` serves 0.0.0.0 over HTTPS with a certificate made once for this computer's names and addresses, with Flask's debug mode off.
+- **Consequences:** Browsers warn once about the self-signed certificate. There is no password reset: deleting `src/website/data/auth.json` removes the account and signs everyone out, and the next visit creates a new one. Without `--lan`, the app still listens on 127.0.0.1 only, with debug on, and still needs the sign-in.
+- **Sources:** `docs/notes/2026-11-15-care-tracking-chat.md`
+- **Replaces:** none
+

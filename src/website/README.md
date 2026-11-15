@@ -11,7 +11,15 @@ py -3.12 -m venv .venv
 .venv/Scripts/python app.py
 ```
 
-Open http://127.0.0.1:5000.
+Open http://127.0.0.1:5000. The first visit creates the sign-in account (D7); after that, sign in.
+
+On the local network, over HTTPS:
+
+```
+.venv/Scripts/python app.py --lan
+```
+
+It prints the addresses to open (for example `https://192.168.1.20:5000`). Browsers warn once about the self-signed certificate (made once in `data/tls/`). Debug mode is off in this mode. There is no password reset: delete `data/auth.json` to remove the account (everyone is signed out) and create a new one on the next visit.
 
 ## Modes
 
@@ -26,6 +34,17 @@ Open http://127.0.0.1:5000.
 - **Toy** (`data/toy/`): sample lizards, videos and sensors, committed.
 - **Main** (`data/main/`): starts empty; the keeper uploads media and adds lizards. Git-ignored.
 
+An open animal has sections that open and close (remembered per browser):
+
+| Section | What |
+|---|---|
+| Environment | Live temperature and humidity, and their graphs; the species profile's ranges are dotted lines |
+| Movement | Position in the latest analysis; time on each side (hot / middle / cold third), all, day (7:00 to 19:00) and night; movement per interval (5 to 60 min, bar chart); average movement by hour of day |
+| Notifications | Neither good nor bad: the AI's notable moments, eating, droppings, changes between analyses (activity, species checks), feedings. The latest from every animal are also in the summary bar |
+| Feeding | The feeding log, days since fed and Fed / Due / Overdue from the profile's feeding interval (Overdue is an alert). Entries are added and deleted in dev mode, for a species with a profile |
+
+The add/edit form also asks for the animal's sex; profiles hold sex-specific notes and conditions, used for that animal.
+
 The dashboard shows lizards 2 per row, compact (name, alerts, video). Clicking a name opens that lizard to full width; clicking it again closes it. Open, a lizard's video has a full-screen button (Esc exits), and the AI analysis panel has **Analyze**: the last 15 min to 6 h, ending now, sent with the provider in use and the image count set under AI polling. No dev mode needed.
 
 ## Research tab: species profiles
@@ -37,6 +56,7 @@ Type a species in plain English ("crested gecko", "red-eared slider"). One call 
 - Profiles are AI-written: check them. **Edit** (the JSON) marks a profile as checked; **Regenerate** replaces it; **Delete** removes it and its photos.
 - Works with Claude and the Mock (a labelled placeholder); not with Gemini yet.
 - **Adding an animal** whose species has no profile researches it first (one AI call), then adds the animal, so its card starts from the profile. If research fails, nothing is added; **Add without a profile** goes ahead anyway.
+- **Dev mode, on a profile:** generate sensor files from its ranges, 7 days at 5-minute steps: in bounds, goes under, goes over, or high variance. Pick them in the add/edit form.
 - **Species checks:** each profile also defines 1 to 4 checks for that species (shed for lizards and snakes, shell for turtles, skin for frogs...), each with its answers and which answers are a concern. They are shown on the Research page under "Checked in every analysis". Every analysis of an animal asks for the common stats (visible, activity from the species' list, body condition, eating, droppings, food dish, hazards, the species' named conditions, position) plus these checks; the dashboard shows them, raises alerts for concern answers and named conditions, and shows Watch for in-between answers. Profiles made before checks existed need a Regenerate.
 - Spelling help in both species fields: autocomplete and "Did you mean" from `data/species-names.json` (63 commonly kept reptiles and amphibians with scientific names and nicknames such as "beardie") and existing profiles. It only helps with spelling: any species can be typed.
 
