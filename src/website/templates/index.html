@@ -111,6 +111,12 @@
   .analysis p { margin: 0 0 6px; } .analysis ul { margin: 4px 0 0; padding-left: 18px; }
   .analyze-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; } .analyze-row select { width: auto; }
   .ask form { display: flex; gap: 8px; flex-wrap: wrap; } .ask form input[name="q"] { flex: 1 1 200px; width: auto; }
+  .ask-actions { display: flex; gap: 8px; align-items: center; }
+  .icon-btn { display: inline-flex; align-items: center; justify-content: center; padding: 6px 10px; margin: 0; }
+  .ask-photo { display: inline-flex; align-items: center; gap: 4px; }
+  .ask-photo img { height: 36px; width: 36px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
+  .ask-photo .btn { padding: 4px 9px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .asked-picture { display: block; max-width: 220px; border-radius: 6px; margin: 4px 0; }
   .chat { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; max-height: 220px; overflow-y: auto; font-size: 14px; }
   .chat .q { font-weight: 600; } .chat .a { color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -269,6 +275,8 @@
   @media (max-width: 760px) {
     .lizard, .add-form, .add-form fieldset, .charts, .lizards { grid-template-columns: minmax(0, 1fr); }
     .ask form, .upload-row { flex-direction: column; align-items: stretch; }
+    .ask form input[name="q"] { flex: none; }   /* in a column, a flex-basis would make it 200px tall */
+    .ask-actions .btn.primary { flex: 1; }
     /* 16px text in fields, or iPhones zoom the page in when one is tapped */
     input, select, textarea { font-size: 16px; }
     .wrap { padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
@@ -994,8 +1002,17 @@ function renderLizard(l) {
       <ul class="chat" data-chat></ul>
       <form data-action="ask">
         <input name="q" placeholder="e.g. Is ${esc(c.name)} warm enough?" autocomplete="off" required>
-        <button class="btn primary" type="submit">Ask</button>
+        <div class="ask-actions">
+          <label class="btn icon-btn" title="Take or attach a photo (sent instead of the camera picture)">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg><span class="sr-only">Take or attach a photo</span>
+            <input type="file" name="photoFile" accept="image/*" data-ask-photo hidden>
+          </label>
+          <span class="ask-photo" data-ask-preview hidden><img alt="Photo to send"><button type="button" class="btn" data-ask-photo-remove title="Remove the photo" aria-label="Remove the photo">×</button></span>
+          <input type="hidden" name="photo">
+          <button class="btn primary" type="submit">Ask</button>
+        </div>
       </form>
+      <p class="hint" style="margin:6px 0 0">The camera picture is sent with each question; a photo you take or attach replaces it.</p>
     </div>
     ${section(l, "environment", "Environment", `<span data-env-summary></span>`, `
       <dl class="stats">${sensorStats}</dl>
@@ -1397,9 +1414,12 @@ $("#lizards").addEventListener("submit", async e => {
     li.innerHTML = `<div class="q">${esc(q)}</div><div class="a">${realAi() ? "Asking the AI…" : "…"}</div>`;
     chat.appendChild(li); form.q.value = "";
     try {
-      const res = await api("POST", `/lizards/${id}/ask`, { question: q, now: new Date(simNow()).toISOString(), vision: true });
-      li.innerHTML = `<div class="q">${esc(q)}${res.image ? ' <span class="pill none">with picture</span>' : ""}</div>
-        ${res.image ? `<img class="asked-picture" src="${res.image}" alt="Camera picture sent with the question">` : ""}
+      const photo = form.photo.value || undefined;
+      clearAskPhoto(form);
+      const res = await api("POST", `/lizards/${id}/ask`, { question: q, now: new Date(simNow()).toISOString(), vision: true, photo });
+      const what = res.imageSource === "photo" ? "your photo" : "camera picture";
+      li.innerHTML = `<div class="q">${esc(q)}${res.image ? ` <span class="pill none">with ${what}</span>` : ""}</div>
+        ${res.image ? `<img class="asked-picture" src="${res.image}" alt="${res.imageSource === "photo" ? "Your photo" : "Camera picture"} sent with the question">` : ""}
         <div class="a md">${renderMarkdown(res.answer)}</div><details><summary>Prompt sent to ${esc(res.provider)}</summary><pre>${esc(res.prompt)}</pre></details>`;
     } catch (x) { const a = li.querySelector(".a"); a.textContent = x.message; a.classList.add("err"); }
     chat.scrollTop = chat.scrollHeight;
@@ -1664,6 +1684,37 @@ $("#ai-test").addEventListener("click", async e => {
   catch (x) { result = ["error", x.message]; }
   await loadAi(); aiMessage(...result);   // a failed test can change the status (an expired sign-in, for example)
   btn.disabled = false; btn.textContent = "Test connection";
+});
+
+/* Ask: a photo taken or attached on this device replaces the camera picture. It is shrunk here first
+   (1568 px on the long side, JPEG), so a phone photo uploads quickly. */
+const ASK_PHOTO_SIDE = 1568;
+async function shrinkPhoto(file) {
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  const scale = Math.min(1, ASK_PHOTO_SIDE / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale); canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+function clearAskPhoto(form) {
+  form.photo.value = ""; form.photoFile.value = "";
+  form.querySelector("[data-ask-preview]").hidden = true;
+}
+document.addEventListener("change", async e => {
+  if (!e.target.matches("[data-ask-photo]")) return;
+  const form = e.target.form, file = e.target.files[0];
+  if (!file) return;
+  try {
+    form.photo.value = await shrinkPhoto(file);
+    const preview = form.querySelector("[data-ask-preview]");
+    preview.querySelector("img").src = form.photo.value; preview.hidden = false;
+    form.q.focus();
+  } catch { clearAskPhoto(form); alert("Couldn't read that image. Try a JPEG or PNG."); }
+});
+document.addEventListener("click", e => {
+  const remove = e.target.closest("[data-ask-photo-remove]");
+  if (remove) clearAskPhoto(remove.closest("form"));
 });
 
 /* Settings: open on your phone. The server lists its own network addresses and draws the QR code. */

@@ -74,6 +74,7 @@ Every function that touches lizard data takes `mode` first: `toy` or `main`, eac
 | `UpdateProfile` / `DeleteProfile` / `GetProfile` / `ListProfiles` | A keeper's edit (marks it checked); delete with its photos; one profile; all profiles, each with the animals that use it | |
 | `AddFeeding` / `DeleteFeeding` | The feeding log (`reptiles/<id>/feedings.json`, time order): when, food, amount, notes | |
 | `FeedingContext` | The feeding log as the AI sees it, relative to the end of the analysed range | mode, id, end → text |
+| `KeeperPhoto` | A photo the keeper took or attached (a data: URL) as a JPEG of at most 1568 px, turned upright; refuses anything that isn't an image. `AskQuestion` sends it instead of the camera picture | data URL → bytes |
 | `Notifications` | Neutral events, newest first: AI notable moments, eating, droppings, changes between analyses, feedings | analyses, feedings → list |
 | `MovementData` | Every analysed position of an animal with the seconds each image stands for | mode, id → `{points: [{t, p, w}], positionMax, unit, hotSide}` |
 | `GenerateSensors` | Dev mode: four sensor files for a mode from a profile's ranges and a pattern | mode, slug, pattern → names |
@@ -227,6 +228,7 @@ The Claude provider (D4): the Claude API through the `anthropic` package, import
 | `renderMovement` / `barChart` / `zoneOf` | The Movement section: time on each side (all, day, night), movement per interval, by hour of day; bar charts; which third a position is in | |
 | `feedingStatus` | Days since the last feeding (dashboard clock) and Fed / Due / Overdue from the profile | animal → status or null |
 | `noteText` | A notification's text with species check labels from the profile | |
+| `shrinkPhoto` / `clearAskPhoto` | Ask: the camera / attach button's photo, shrunk on the device to 1568 px JPEG before it is sent; removing it | |
 | `loadPhone` / `showPhoneQr` | Settings, Open on your phone: the server's addresses and a QR code for the one picked | |
 | `narrowScreen` | Phones (600px wide or less): charts are drawn 360 wide with fewer labels, so their text stays readable; crossing it redraws | |
 | `loadSystem` / `renderSystem` / `startSystem` | Settings, This installation: branch and commit; update, restart, uninstall, following the task log through the restart | |

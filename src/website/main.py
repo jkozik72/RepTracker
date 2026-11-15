@@ -25,7 +25,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import imageio_ffmpeg
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 
 import ai
 import claude_ai
@@ -839,10 +839,35 @@ def CurrentPicture(mode, config, now, maxWidth=1280):
     return out.getvalue()
 
 
-def AskQuestion(mode, lizardId, question, nowIso, vision=False):
+MAX_PHOTO_BYTES = 20 * 1024 * 1024   # the data: URL of a keeper's photo, before decoding
+PHOTO_MAX_SIDE = 1568                # px; larger images cost more and Claude scales them down anyway
+
+
+def KeeperPhoto(dataUrl):
+    """A photo the keeper took or attached (a data: URL from the page), as JPEG bytes no larger than
+    PHOTO_MAX_SIDE. Anything that isn't a readable image is refused."""
+    text = str(dataUrl or "")
+    if len(text) > MAX_PHOTO_BYTES:
+        raise RepTrackerError("That photo is too large (over 15 MB). Try a smaller one.")
+    match = re.match(r"data:image/[\w.+-]+;base64,(.+)$", text, re.S)
+    if not match:
+        raise RepTrackerError("That file isn't an image.")
+    try:
+        picture = Image.open(io.BytesIO(base64.b64decode(match.group(1), validate=True)))
+        picture = ImageOps.exif_transpose(picture).convert("RGB")   # phone photos: apply their rotation
+    except Exception:
+        raise RepTrackerError("Couldn't read that image. Try a JPEG or PNG.")
+    picture.thumbnail((PHOTO_MAX_SIDE, PHOTO_MAX_SIDE))
+    out = io.BytesIO()
+    picture.save(out, "JPEG", quality=85)
+    return out.getvalue()
+
+
+def AskQuestion(mode, lizardId, question, nowIso, vision=False, photo=None):
     """Answer a keeper's question from prompts/ask.txt; returns the answer and the prompt sent.
 
     With vision, the camera picture at nowIso is sent too, and returned as a data: URL for the page.
+    A photo from the keeper (a data: URL) replaces the camera picture.
     """
     config = LoadConfig(mode, lizardId)
     question = str(question or "").strip()[:500]
@@ -853,10 +878,14 @@ def AskQuestion(mode, lizardId, question, nowIso, vision=False):
     now = ParseTime(nowIso)
     sensorsNow = SensorsNow(mode, config, now)
     # No picture before the lizard's camera starts: the question is asked without one.
-    image = CurrentPicture(mode, config, now) if vision and SourceOffsetSeconds(config, now) is not None else None
+    if photo:
+        image = KeeperPhoto(photo)
+        note = "A photo the keeper took or attached is included (not from the enclosure camera). Use it to answer."
+    else:
+        image = CurrentPicture(mode, config, now) if vision and SourceOffsetSeconds(config, now) is not None else None
+        note = f"A picture from the camera at {LabelTime(now)} is attached. Use it to answer." if image else "No picture is attached."
     prompt = FillTemplate("ask.txt", {
-        "image_note": (f"A picture from the camera at {LabelTime(now)} is attached. Use it to answer." if image
-                       else "No picture is attached."),
+        "image_note": note,
         "name": config["name"], "species": config["species"], "question": question,
         "sensor_now": sensorsNow,
         "analysis_range": f"{latest['range']['start']} to {latest['range']['end']}" if latest else "none",
@@ -864,7 +893,7 @@ def AskQuestion(mode, lizardId, question, nowIso, vision=False):
     })
     provider = CurrentProvider()
     answer = ASKERS[provider](prompt, latest, sensorsNow, image)
-    reply = {"answer": answer, "prompt": prompt, "provider": provider}
+    reply = {"answer": answer, "prompt": prompt, "provider": provider, "imageSource": "photo" if photo else "camera"}
     if image:
         reply["image"] = "data:image/jpeg;base64," + base64.standard_b64encode(image).decode("ascii")
     return reply

@@ -342,7 +342,8 @@ def send_prompts(mode, lizard_id, bundle_id):
 @app.post("/api/<mode>/lizards/<lizard_id>/ask")
 def ask(mode, lizard_id):
     body = request.get_json(force=True) or {}
-    return jsonify(main.AskQuestion(mode, lizard_id, body.get("question"), body.get("now"), bool(body.get("vision", True))))
+    return jsonify(main.AskQuestion(mode, lizard_id, body.get("question"), body.get("now"), bool(body.get("vision", True)),
+                                    body.get("photo")))
 
 
 def ServeLan(port, redirectPort):
