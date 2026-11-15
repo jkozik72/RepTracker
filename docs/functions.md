@@ -178,6 +178,7 @@ The Claude provider (D4): the Claude API through the `anthropic` package, import
 | `loadProfiles` / `showProfile` / `renderProfile` | The Research tab: the profile list, and one profile with photos, husbandry facts, conditions, hazards, and Edit / Regenerate / Delete | |
 | `suggestSpecies` / `renderSuggestions` | Spelling help for species: up to 3 "Did you mean" suggestions from profiles and `data/species-names.json` (names, scientific names, nicknames), or a ✓ when the name is known | typed text → `{exact, list}` |
 | `nameScore` / `editDistance` | How far a typed name is from a known one: edit distance with swapped letters as one edit, word by word, prefixes, and a single word matching part of a name (a group such as "gecko") | |
+| `findProfile` | The profile for a typed species, matched like the server (typed, common or scientific name); the add/edit form researches the species first when there is none | species text → profile summary or undefined |
 | `speciesHint` | Under the species field: whether the typed species has a profile | |
 | `toggleExpand` | Opens a lizard from compact to full width, or closes it |
 | `positionScale` | Client-side twin of `PositionScale`: the position chart's unit and maximum |

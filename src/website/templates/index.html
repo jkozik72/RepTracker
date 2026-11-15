@@ -1152,12 +1152,17 @@ function guessUnit(sel) {
   const unitSel = sel.parentElement.querySelector("select:not([data-media])");
   if (unit && [...unitSel.options].some(o => o.value === unit)) unitSel.value = unit;
 }
+// The species profile for a typed species, matched like the server does (typed, common or scientific name)
+function findProfile(species) {
+  const typed = slugify(species);
+  return typed ? profiles.find(pr => [pr.slug, slugify(pr.species), slugify(pr.commonName), slugify(pr.scientificName)].includes(typed)) : null;
+}
 function speciesHint() {
-  const typed = slugify(addForm.elements.species.value), hint = $("#f-species-hint");
-  if (!typed) { hint.textContent = "Type it in plain English."; return; }
-  const match = profiles.find(pr => [pr.slug, slugify(pr.species), slugify(pr.commonName), slugify(pr.scientificName)].includes(typed));
+  const hint = $("#f-species-hint");
+  if (!slugify(addForm.elements.species.value)) { hint.textContent = "Type it in plain English."; return; }
+  const match = findProfile(addForm.elements.species.value);
   hint.innerHTML = match ? `Profile: <strong>${esc(match.commonName)}</strong> <em>${esc(match.scientificName)}</em>. Used for alerts and analyses.`
-                         : `No profile yet. Create one on the Research tab for sensor alerts and better analyses.`;
+                         : `No profile yet. Saving researches this species first (one call to ${esc(ai.provider || "the AI provider")}), then adds the animal.`;
 }
 function fillMediaSelects() {
   $("#species-options").innerHTML = profiles.map(pr => `<option value="${esc(pr.species)}">${esc(pr.commonName)} · ${esc(pr.scientificName)} (profile)</option>`).join("")
@@ -1181,6 +1186,7 @@ addForm.addEventListener("change", e => { if (e.target.matches("[data-media='sen
 // The same form adds a lizard or edits one (editingId set). Editing keeps the lizard's id, start time and analyses.
 let editingId = null;
 function closeAdd() {
+  skipResearch = false;
   $("#f-species-suggest").innerHTML = "";
   addForm.reset(); addErr.hidden = true; addForm.hidden = true; addBtn.hidden = false; $("#f-coldside").textContent = "Right";
   editingId = null; $("#form-title").textContent = "Add an animal"; $("#form-submit").textContent = "Create animal";
@@ -1204,9 +1210,29 @@ function openEdit(l) {
 addBtn.addEventListener("click", () => { fillMediaSelects(); addBtn.hidden = true; addForm.hidden = false; addForm.elements.name.focus(); });
 $("#add-cancel").addEventListener("click", closeAdd);
 $("#f-hotside").addEventListener("change", e => $("#f-coldside").textContent = e.target.value === "left" ? "Right" : "Left");
+// Adding (or editing to) a species with no profile researches it first, so the animal's card starts from its
+// profile. If research fails, nothing is added; "Add without a profile" goes ahead anyway.
+let skipResearch = false;
 addForm.addEventListener("submit", async e => {
   e.preventDefault();
-  const f = addForm.elements;
+  const f = addForm.elements, submit = $("#form-submit"), label = submit.textContent;
+  addErr.hidden = true;
+  if (!f.name.value.trim() || !f.species.value.trim()) { addErr.textContent = "Fill in the name and the species."; addErr.hidden = false; return; }
+  if (!skipResearch && !findProfile(f.species.value)) {
+    submit.disabled = true; submit.textContent = "Creating the species profile…";
+    try {
+      await researchApi("POST", "", { species: f.species.value.trim() });
+      await loadProfiles(); speciesHint();
+    } catch (x) {
+      addErr.innerHTML = `Couldn't create a profile for “${esc(f.species.value.trim())}”: ${esc(x.message)} `
+        + `<button class="btn" type="button" data-add-anyway>Add without a profile</button>`;
+      addErr.hidden = false; submit.disabled = false; submit.textContent = label;
+      return;
+    }
+    submit.textContent = editingId ? "Saving…" : "Adding…";
+  }
+  skipResearch = false;
+  submit.disabled = false; submit.textContent = label;
   const body = {
     name: f.name.value.trim(), species: f.species.value.trim(),
     enclosureWidthCm: f.width.value.trim() === "" ? null : +f.width.value,
@@ -1231,6 +1257,11 @@ addForm.addEventListener("submit", async e => {
     lizards.push(created); closeAdd(); renderLizards(); renderSettings();
     document.getElementById(`lizard-${created.id}`).scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (x) { addErr.textContent = x.message; addErr.hidden = false; }
+});
+
+addErr.addEventListener("click", e => {
+  if (!e.target.closest("[data-add-anyway]")) return;
+  skipResearch = true; addForm.requestSubmit();
 });
 
 /* Tabs */

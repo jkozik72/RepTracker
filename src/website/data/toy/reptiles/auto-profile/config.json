@@ -1,0 +1,33 @@
+{
+  "name": "Auto Profile",
+  "species": "zz auto frog",
+  "enclosureWidthCm": null,
+  "createdAt": "2026-11-15T08:24:25Z",
+  "camera": {
+    "view": "top",
+    "video": "gecko-top"
+  },
+  "sensors": {
+    "hotSide": "left",
+    "hot": {
+      "temperature": {
+        "series": "hot-temp-f",
+        "unit": "F"
+      },
+      "humidity": {
+        "series": "hot-humidity-rh",
+        "unit": "%RH"
+      }
+    },
+    "cold": {
+      "temperature": {
+        "series": "cold-temp-f",
+        "unit": "F"
+      },
+      "humidity": {
+        "series": "cold-humidity-rh",
+        "unit": "%RH"
+      }
+    }
+  }
+}
