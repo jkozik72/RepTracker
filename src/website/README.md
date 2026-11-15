@@ -27,7 +27,7 @@ On a Raspberry Pi, one command installs it as a service at `https://reptracker.l
 
 | | Dev mode off | Dev mode on (Settings) |
 |---|---|---|
-| Data shown | Main | Toy or Main (switch in Settings) |
+| Data shown | Main | Main (default) or Toy (switch in Settings) |
 | Clock | Real time | Clock bar above the alerts: speed, set time, pause, resume |
 | Uploads | — | Videos (.mp4, several at once, up to 3 GB each, with a progress bar) and sensor files (.json) into the current mode, in Settings; uploaded videos can be deleted there (× ; not samples, not while a lizard uses them) |
 | Per lizard | — | Generate, inspect and send prompts for a time range |
@@ -98,7 +98,7 @@ Shared: `research/<slug>/` (species profiles, see above), `data/defaults/sensors
 
 ## AI provider
 
-The project uses the **Claude API** ([D4](../../docs/decisions.md)). Three providers are registered in `main.py` (`PROVIDERS`, `ASKERS`); choose one under **Settings → dev mode → AI provider**. The choice is per computer (`data/ai-settings.json`, git-ignored) and applies to analyses and questions.
+The project uses the **Claude API** ([D4](../../docs/decisions.md)). Three providers are registered in `main.py` (`PROVIDERS`, `ASKERS`); choose one under **Settings → AI provider** (dev mode not needed). The choice is per computer (`data/ai-settings.json`, git-ignored) and applies to analyses and questions.
 
 | Provider | What it is | Needs |
 |---|---|---|
@@ -109,7 +109,7 @@ The project uses the **Claude API** ([D4](../../docs/decisions.md)). Three provi
 ### Set up Claude (once per computer)
 
 1. Make an API key in the Claude Console (API keys page).
-2. In the app: **Settings → dev mode → AI provider → Claude**, paste the key, **Save key**.
+2. In the app: **Settings → AI provider → Claude**, paste the key, **Save key**.
 3. Pick a **Model** (below the key), select **Claude**, then **Test connection**. The same check from a terminal: `python claude_ai.py`.
 
 The key is kept only on the computer that runs `app.py`, in `data/claude-key.json` (git-ignored), and the page only ever shows a masked version (`sk-ant-…1234`). **Remove** deletes it. Without a saved key, the `ANTHROPIC_API_KEY` environment variable is used instead.
