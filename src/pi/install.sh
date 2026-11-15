@@ -143,7 +143,10 @@ PY_OK=$(python3 -c 'import sys; print(int(sys.version_info >= (3, 11)))')
 
 # The Pi camera (rpicam-vid). A soft step: plain Debian without the package still installs, camera off.
 if ! command -v rpicam-vid >/dev/null 2>&1; then
-  "${APT[@]}" install -y rpicam-apps-lite >>"$LOG" 2>&1 || true
+  # Raspberry Pi OS calls it rpicam-apps-lite (or rpicam-apps); Ubuntu calls it rpicam-apps
+  for pkg in rpicam-apps-lite rpicam-apps; do
+    "${APT[@]}" install -y "$pkg" >>"$LOG" 2>&1 && break
+  done
 fi
 if command -v rpicam-vid >/dev/null 2>&1; then CAMERA_FOUND=1; done_line "Pi camera software (rpicam-vid)"
 else CAMERA_FOUND=0; say "No rpicam-vid: the live camera stays off"; fi
