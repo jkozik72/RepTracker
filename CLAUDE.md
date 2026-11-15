@@ -19,6 +19,7 @@ docs/
 ├── approaches/         one page per motion-tracking approach: what, how, pros/cons, evidence, status. _template.md
 ├── functions.md        naming conventions, glossary, and the reference of named functions: what each does, where it lives
 ├── decisions.md        append-only log of decisions, D1, D2, ...
+├── hackathon/          Hack The Nest 2026: tracks, MLH categories, opportunities, and the project-fit comparison
 └── open-questions.md   every open question in one table, Q1, Q2, ...; answered rows move to the bottom
 experiments/         quick spikes, one folder each, README with Question / Setup / Result / Conclusion
 src/                 the code. Language and tooling: TBD (Q2)
@@ -64,7 +65,7 @@ One file per motion-tracking approach in `docs/approaches/<name>.md`, from `_tem
 |---|---|
 | `docs/sources/` | **Add only.** Never edit, rename, or delete a committed file. A new version is a new file. (Renaming a just-added, uncommitted file is fine.) |
 | `docs/notes/` | Edit to fix or add detail; must stay faithful to the source. Strike answered open questions, check off done actions. |
-| `docs/overview.md`, `architecture.md`, `functions.md`, `approaches/` | Current state only, through PRs. History lives in `decisions.md`, the notes, and git. |
+| `docs/overview.md`, `architecture.md`, `functions.md`, `approaches/`, `hackathon/` | Current state only, through PRs. History lives in `decisions.md`, the notes, and git. |
 | `docs/decisions.md` | **Append only.** Never edit or delete an entry. Reverse one with a new entry that names what it replaces. |
 | `docs/open-questions.md` | Add rows at the bottom; never reuse an ID. Answered rows move to the Answered table with the answer and its source. |
 | `experiments/` | Anything goes, but every experiment has a README with a Result and a Conclusion. Never delete; dropped ideas stay. |
