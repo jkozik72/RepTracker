@@ -953,11 +953,12 @@ def _ResearchCall(fn, *args):
 
 
 def _ProfileUsers():
+    """{profile slug: [{name, mode}]} of the animals on the dashboards (removed animals don't count)."""
     used = {}
     for mode in MODES:
         for l in ListLizards(mode):
             if l["profile"]:
-                used.setdefault(l["profile"]["slug"], []).append(f"{l['config']['name']} ({mode})")
+                used.setdefault(l["profile"]["slug"], []).append({"name": l["config"]["name"], "mode": mode})
     return used
 
 
