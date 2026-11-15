@@ -1851,20 +1851,33 @@ $("#alerts-on").addEventListener("click", async () => {
         ? "On an iPhone, alerts work from the home-screen app: install the certificate, Add to Home Screen, then turn alerts on there."
         : "This browser can't receive push notifications.");
     }
-    // First, while the tap still counts: phones ignore permission requests that don't come straight from a tap.
-    step("Asking for permission to show notifications…");
-    const permission = await withTimeout(Notification.requestPermission(), 60000, stage);
+    // 1. Does this browser trust RepTracker? The worker was registered when the page loaded, so this answer is
+    //    already in (no waiting, so the tap still counts for step 2). Browsers don't show permission prompts on a
+    //    connection they don't trust; they leave the request unanswered instead.
+    stage = "Checking that this browser trusts RepTracker";
+    if (!(await window.swReady)) {
+      throw new Error("This browser doesn't trust RepTracker's certificate yet, so it won't allow notifications. "
+        + "Install the certificate (Open on your phone, below), then close this tab and open RepTracker again.");
+    }
+    // 2. Permission, straight from the tap: phones ignore permission requests that don't come from one.
+    stage = "Asking for permission to show notifications";
+    let permission = Notification.permission;
+    if (permission === "default") {
+      step("Asking for permission to show notifications… Choose Allow in the prompt.");
+      permission = await withTimeout(new Promise(resolve => {
+        const answer = Notification.requestPermission(resolve);   // older browsers answer through the callback
+        if (answer && answer.then) answer.then(resolve);
+      }), 20000, stage).catch(() => "no-prompt");
+    }
     if (permission !== "granted") {
       throw new Error(permission === "denied"
-        ? `Notifications are blocked for RepTracker. In ${browserName()}: ⋮ → Settings → Site settings → Notifications, allow this site, then try again.`
+        ? `Notifications are blocked for this site. In ${browserName()}: tap the icon left of the address → Permissions → Notifications → Allow, then try again.`
+        : permission === "no-prompt"
+        ? `No permission prompt appeared. Check that ${browserName()} itself may show notifications (Android Settings → Apps → ${browserName()} → Notifications → on), then try again.`
         : "Notification permission wasn't given (the prompt was closed). Tap the button again and choose Allow.");
     }
     stage = "Starting the app's background worker";
     step(`${stage}…`);
-    if (!(await withTimeout(window.swReady, 10000, stage))) {
-      throw new Error("The browser refused RepTracker's background worker: this phone doesn't trust RepTracker's certificate yet. "
-        + "Install it (Open on your phone, below), then close this tab and open RepTracker again.");
-    }
     const reg = await withTimeout(navigator.serviceWorker.ready, 15000, stage);
     stage = "Registering with the push service";
     step(`${stage}…`);
