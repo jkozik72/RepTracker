@@ -54,8 +54,14 @@ HAS_SYSTEMD=0; [ -d /run/systemd/system ] && HAS_SYSTEMD=1
 
 say "Installing system packages (git, Python, ffmpeg, avahi for the .local name)"
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq git python3 python3-venv python3-pip ffmpeg avahi-daemon ca-certificates sudo >/dev/null
+# A fresh Pi often runs its automatic updates (unattended-upgrades) for a few minutes after boot, holding
+# apt's lock. Wait for it (up to 15 min) instead of failing.
+if fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock >/dev/null 2>&1; then
+  echo "   The Pi is installing its own updates; waiting for them to finish (this can take a few minutes)..."
+fi
+APT=(apt-get -o DPkg::Lock::Timeout=900)
+"${APT[@]}" update -qq
+"${APT[@]}" install -y -qq git python3 python3-venv python3-pip ffmpeg avahi-daemon ca-certificates sudo >/dev/null
 
 PY_OK=$(python3 -c 'import sys; print(int(sys.version_info >= (3, 11)))')
 [ "$PY_OK" = 1 ] || die "RepTracker needs Python 3.11 or newer; this system has $(python3 --version). Use Raspberry Pi OS Bookworm or newer."
