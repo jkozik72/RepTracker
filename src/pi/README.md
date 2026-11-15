@@ -49,7 +49,7 @@ Updates reset tracked files (for example Toy mode's sample animals); Main data, 
 
 ## Live camera (Pi Camera Module 3)
 
-The installer installs `rpicam-vid` if it is missing, adds `reptracker` to group `video`, and sets `REPTRACKER_CAMERA=pi`. Then **Add animal → Video → Live camera (this computer)**. Settings → Update does not change the service or `/etc/reptracker.env`: run the install command again.
+The installer installs `rpicam-vid` if it is missing, adds `reptracker` to group `video`, and sets `REPTRACKER_CAMERA=pi`. Then **Add animal → Camera → Source: Camera**, where its picture settings (focus, exposure, white balance, brightness, contrast) are set with a live preview. Settings → Update does not change the service or `/etc/reptracker.env`: run the install command again.
 
 - A Pi 5 needs the **Standard–Mini** camera cable (the camera comes with a Standard–Standard one). Power off before plugging it in.
 - Check the camera before RepTracker:
@@ -63,5 +63,5 @@ timedatectl
 
 The first must list `imx708`; the third prints about a million bytes (0: check group `video`); `timedatectl` must say the clock is synchronized.
 
-- Focus, exposure and white balance: `REPTRACKER_CAMERA_ARGS` in `/etc/reptracker.env`, then `sudo systemctl restart reptracker`. Filming a laptop screen about 30 cm away: `REPTRACKER_CAMERA_ARGS="--autofocus-mode manual --lens-position 3.0 --shutter 16667 --gain 1 --awb daylight"` (a starting point, not yet tried on the Pi).
+- Filming a laptop screen about 30 cm away, a starting point (not yet tried on the Pi): Focus manual at 3.0, Exposure manual with shutter 16.7 ms and gain 1, White balance daylight. Until settings are saved in the form, `REPTRACKER_CAMERA_ARGS` in `/etc/reptracker.env` is used.
 - Without a camera (any computer): `python app.py --camera test` replays a toy video as the live camera.

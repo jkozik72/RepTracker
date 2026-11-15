@@ -267,6 +267,16 @@ def camera_status():
     return jsonify(camera.CameraStatus())
 
 
+@app.put("/api/camera/settings")
+def camera_settings():
+    """Save the camera's picture settings (focus, exposure, white balance, brightness, contrast) and apply them."""
+    try:
+        camera.SaveCameraSettings(request.get_json(force=True) or {})
+    except ValueError as err:
+        raise RepTrackerError(str(err))
+    return jsonify(camera.CameraStatus())
+
+
 @app.get("/media/camera/picture")
 def camera_picture():
     """The live camera's picture as JPEG: the newest frame (if under camera.FRESH_S old), or with ?t=<ISO time>

@@ -71,7 +71,7 @@ Every function that touches lizard data takes `mode` first: `toy` or `main`, eac
 | `LizardConfigFromForm` | Validates the add/edit-lizard form into a config (name, species, width, camera, sensors) | mode, form dict, createdAt → config |
 | `UpdateLizard` | Edits a lizard: new config from the form; keeps its id, `createdAt` and analyses; renames it in `reptiles.json` | mode, id, form dict → `{id, config, latest}` |
 | `IsLiveCamera` | Whether the lizard's camera is the live camera (`camera.source == "live"`) | config → bool |
-| `CameraFromForm` | The camera part of a config: a video `{view, video}`, or `{view, source: "live", video: null}` for the form value `@live` (refused when the camera is off) | form camera, media → dict |
+| `CameraFromForm` | The camera part of a config: a video `{view, video}`, or `{view, source: "live", video: null}` when the form's Source is Camera (refused when the camera is off) | form camera, media → dict |
 | `LiveFrame` | The live camera's stored frame nearest a time that opens as an image; damaged files skipped | time → (frameTime, path) / None |
 | `LivePictureAt` | The live picture for now: the fresh newest frame, else the stored one | time → PIL image / None |
 | `DeleteVideo` | Deletes an uploaded camera video for good; refuses the committed samples and a video a lizard still uses | mode, name → same as `ListMedia` |
@@ -127,7 +127,10 @@ The live camera, one per computer. Source: `docs/notes/2026-11-15-live-camera-ch
 | `FrameCandidates` / `FrameAt` | Stored frames nearest a time within 30 s, nearest first; empty files skipped | time → (frameTime, path) / None |
 | `LatestFrame` | The newest frame, in memory | → (time, jpeg) / None |
 | `PruneFrames` | Deletes frames older than 72 h (`KEEP_HOURS`) | now → none |
-| `CameraStatus` | Device, running, last frame time, error, retention, server time | → dict |
+| `CameraStatus` | Device, running, last frame time, error, retention, server time, picture settings | → dict |
+| `CameraSettings` / `CheckSettings` / `SaveCameraSettings` | The picture settings (focus, exposure, white balance, brightness, contrast) in `data/camera/settings.json`: read with defaults, validate, save and restart capture | dict → dict |
+| `SettingsArgs` | `rpicam-vid` options for the picture settings | settings → argv |
+| `RestartCapture` | Restarts the capture child at once (new settings) | → none |
 
 ### `src/website/ai.py`
 

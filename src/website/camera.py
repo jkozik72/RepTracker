@@ -10,6 +10,7 @@ There is no video: the app only ever needs a picture for a time T and a picture 
 """
 
 import argparse
+import json
 import os
 import shlex
 import shutil
@@ -23,9 +24,19 @@ import imageio_ffmpeg
 
 ROOT = Path(__file__).resolve().parent
 FRAMES = ROOT / "data" / "camera" / "frames"   # git-ignored
+SETTINGS_FILE = ROOT / "data" / "camera" / "settings.json"   # set from the add/edit-animal form
 TEST_VIDEO = ROOT / "data" / "toy" / "media" / "videos" / "gecko-top.mp4"
 DEVICES = ["off", "pi", "test"]
-DEFAULT_LOOK = "--autofocus-mode manual --lens-position 2.0"   # 0.5 m; overridden by REPTRACKER_CAMERA_ARGS
+DEFAULT_LOOK = "--autofocus-mode manual --lens-position 2.0"   # 0.5 m; used until settings are saved
+
+# The camera's picture settings, set in the add/edit-animal form. One camera per computer, so one set.
+# focus: auto (continuous) or manual at lensPosition (dioptres: 0 = infinity, 2 = 50 cm, 3.3 = 30 cm).
+# exposure: auto (with ev compensation) or manual (shutterMs, gain). The rest map to rpicam-vid options.
+AWB_MODES = ["auto", "daylight", "cloudy", "indoor", "fluorescent", "tungsten", "incandescent"]
+DEFAULT_SETTINGS = {"focus": "manual", "lensPosition": 2.0, "exposure": "auto", "ev": 0.0, "shutterMs": 16.667,
+                    "gain": 1.0, "awb": "auto", "brightness": 0.0, "contrast": 1.0}
+SETTING_RANGES = {"lensPosition": (0, 10), "ev": (-8, 8), "shutterMs": (0.1, 200), "gain": (1, 16),
+                  "brightness": (-1, 1), "contrast": (0, 4)}
 
 KEEP_HOURS = 72          # how far back stored frames go
 KEEP_EVERY_S = 10        # one stored frame per slot of this many seconds
@@ -37,6 +48,7 @@ MAX_BUFFER = 20 * 1024 * 1024
 
 _lock = threading.Lock()
 _stop = threading.Event()
+_restart = threading.Event()
 _state = {"device": "off", "running": False, "lastFrameAt": None, "error": None}
 _latest = None            # (time, jpeg bytes)
 _child = None
@@ -57,13 +69,81 @@ def _Iso(t):
 def CaptureCommand(device):
     """The child process that writes MJPEG to stdout for this device."""
     if device == "pi":
+        look = (SettingsArgs(CameraSettings()) if SETTINGS_FILE.exists()
+                else shlex.split(os.environ.get("REPTRACKER_CAMERA_ARGS", DEFAULT_LOOK)))
         return (["rpicam-vid", "--nopreview", "--timeout", "0", "--codec", "mjpeg", "--quality", "80", "--flush",
-                 "--mode", "2304:1296", "--width", "1280", "--height", "720", "--framerate", "5", "--output", "-"]
-                + shlex.split(os.environ.get("REPTRACKER_CAMERA_ARGS", DEFAULT_LOOK)))
-    if device == "test":
-        return [imageio_ffmpeg.get_ffmpeg_exe(), "-loglevel", "error", "-re", "-stream_loop", "-1",
-                "-i", str(TEST_VIDEO), "-vf", "fps=5,scale=1280:720", "-f", "mjpeg", "-q:v", "4", "-"]
+                 "--mode", "2304:1296", "--width", "1280", "--height", "720", "--framerate", "5", "--output", "-"] + look)
+    if device == "test":   # the stand-in shows brightness and contrast, so the settings visibly do something
+        s = CameraSettings()
+        return [imageio_ffmpeg.get_ffmpeg_exe(), "-loglevel", "error", "-re", "-stream_loop", "-1", "-i", str(TEST_VIDEO),
+                "-vf", f"fps=5,scale=1280:720,eq=brightness={s['brightness']}:contrast={s['contrast']}",
+                "-f", "mjpeg", "-q:v", "4", "-"]
     raise ValueError(f"Unknown camera device '{device}'; use one of {', '.join(DEVICES)}.")
+
+
+def CameraSettings():
+    """The saved picture settings, with defaults for anything not saved."""
+    try:
+        saved = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        saved = {}
+    return {**DEFAULT_SETTINGS, **{k: v for k, v in saved.items() if k in DEFAULT_SETTINGS}}
+
+
+def CheckSettings(values):
+    """Validate picture settings (missing keys keep their saved value); returns the full set. ValueError if wrong."""
+    s = CameraSettings()
+    for key, value in (values or {}).items():
+        if key not in DEFAULT_SETTINGS:
+            continue
+        if key == "focus":
+            if value not in ("auto", "manual"):
+                raise ValueError("Focus: auto or manual.")
+        elif key == "exposure":
+            if value not in ("auto", "manual"):
+                raise ValueError("Exposure: auto or manual.")
+        elif key == "awb":
+            if value not in AWB_MODES:
+                raise ValueError(f"White balance: one of {', '.join(AWB_MODES)}.")
+        else:
+            lo, hi = SETTING_RANGES[key]
+            try:
+                value = float(value)
+            except (TypeError, ValueError):
+                raise ValueError(f"{key}: a number from {lo} to {hi}.")
+            if not lo <= value <= hi:
+                raise ValueError(f"{key}: a number from {lo} to {hi}.")
+        s[key] = value
+    return s
+
+
+def SettingsArgs(s):
+    """rpicam-vid options for the picture settings."""
+    args = ["--autofocus-mode", "continuous"] if s["focus"] == "auto" else ["--autofocus-mode", "manual", "--lens-position", f"{s['lensPosition']:g}"]
+    if s["exposure"] == "manual":
+        args += ["--shutter", str(round(s["shutterMs"] * 1000)), "--gain", f"{s['gain']:g}"]
+    else:
+        args += ["--ev", f"{s['ev']:g}"]
+    return args + ["--awb", s["awb"], "--brightness", f"{s['brightness']:g}", "--contrast", f"{s['contrast']:g}"]
+
+
+def SaveCameraSettings(values):
+    """Validate and save the picture settings, then restart capture so they take effect (a gap of a few seconds)."""
+    s = CheckSettings(values)
+    SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    part = SETTINGS_FILE.with_name(SETTINGS_FILE.name + ".part")
+    part.write_text(json.dumps(s, indent=2), encoding="utf-8")
+    os.replace(part, SETTINGS_FILE)
+    RestartCapture()
+    return s
+
+
+def RestartCapture():
+    """Stop the capture child; the capture loop starts it again at once with the current settings."""
+    proc = _child
+    if proc:
+        _restart.set()
+        proc.kill()
 
 
 def SplitJpegs(buffer):
@@ -177,7 +257,8 @@ def CameraStatus():
     """What the dashboard shows about this computer's camera."""
     with _lock:
         s = dict(_state)
-    return {**s, "keepHours": KEEP_HOURS, "keepEveryS": KEEP_EVERY_S, "serverTime": _Iso(_Now())}
+    return {**s, "keepHours": KEEP_HOURS, "keepEveryS": KEEP_EVERY_S, "serverTime": _Iso(_Now()),
+            "settings": CameraSettings(), "awbModes": AWB_MODES}
 
 
 def _SetState(**kw):
@@ -240,6 +321,9 @@ def _CaptureLoop(device, onSaved=None):
             got, code = _RunChild(device, onSaved)
             if got:
                 delay = 2
+            if _restart.is_set():   # new settings: start again at once
+                _restart.clear()
+                continue
             if not _stop.is_set():
                 _SetState(error=f"The camera stopped (exit code {code}); restarting.")
         except FileNotFoundError as err:

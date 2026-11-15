@@ -347,9 +347,6 @@ def LizardConfigFromForm(mode, formData, createdAt):
     }
 
 
-LIVE_CHOICE = "@live"   # the form's value for the live camera; MediaName never makes it
-
-
 def IsLiveCamera(config):
     return config["camera"].get("source") == "live"
 
@@ -357,7 +354,7 @@ def IsLiveCamera(config):
 def CameraFromForm(camera, media):
     """The camera part of a lizard's config: a video file {view, video}, or {view, source: "live", video: None}."""
     view = _Choice(camera.get("view"), CAMERA_VIEWS, "Camera view")
-    if camera.get("video") == LIVE_CHOICE or camera.get("source") == "live":
+    if camera.get("source") == "live":
         if not media["liveCamera"]:
             raise RepTrackerError("This computer has no live camera turned on.")
         return {"view": view, "source": "live", "video": None}

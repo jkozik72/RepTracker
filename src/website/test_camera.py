@@ -149,7 +149,7 @@ class LiveLizardTest(unittest.TestCase):
             main.CurrentPicture("toy", config, T0 + timedelta(hours=1))
 
     def test_form_accepts_live_only_when_the_camera_is_on(self):
-        form = {"name": "Rex", "species": "x", "camera": {"view": "top", "video": main.LIVE_CHOICE},
+        form = {"name": "Rex", "species": "x", "camera": {"view": "top", "source": "live"},
                 "sensors": main.LoadConfig("toy", "rex")["sensors"]}
         with mock.patch.dict(camera._state, {"device": "off"}):
             with self.assertRaisesRegex(main.RepTrackerError, "no live camera"):
@@ -165,6 +165,28 @@ class LiveLizardTest(unittest.TestCase):
         form = {"name": "Rex", "species": "x", "camera": {"view": "side", "video": "v"},
                 "sensors": main.LoadConfig("toy", "rex")["sensors"]}
         self.assertEqual(main.LizardConfigFromForm("toy", form, "2026-11-14T00:00:00Z")["camera"], {"view": "side", "video": "v"})
+
+
+class CameraSettingsTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
+        p = mock.patch.object(camera, "SETTINGS_FILE", Path(tmp.name) / "settings.json"); p.start(); self.addCleanup(p.stop)
+
+    def test_defaults_then_saved_settings_reach_the_command(self):
+        self.assertIn("--lens-position", camera.CaptureCommand("pi"))
+        camera.SaveCameraSettings({"focus": "auto", "exposure": "manual", "shutterMs": "16.667", "gain": 2, "awb": "daylight"})
+        cmd = camera.CaptureCommand("pi")
+        self.assertEqual(cmd[cmd.index("--autofocus-mode") + 1], "continuous")
+        self.assertNotIn("--lens-position", cmd)
+        self.assertEqual(cmd[cmd.index("--shutter") + 1], "16667")
+        self.assertEqual(cmd[cmd.index("--awb") + 1], "daylight")
+        self.assertEqual(camera.CameraSettings()["gain"], 2.0)
+
+    def test_bad_values_are_refused(self):
+        for bad in ({"gain": 40}, {"awb": "purple"}, {"focus": "maybe"}, {"brightness": "x"}):
+            with self.assertRaises(ValueError):
+                camera.SaveCameraSettings(bad)
+        self.assertFalse(camera.SETTINGS_FILE.exists())
 
 
 class PictureRouteTest(unittest.TestCase):
