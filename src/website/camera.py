@@ -33,9 +33,9 @@ DEFAULT_LOOK = "--autofocus-mode manual --lens-position 2.0"   # 0.5 m; used unt
 # focus: auto (continuous) or manual at lensPosition (dioptres: 0 = infinity, 2 = 50 cm, 3.3 = 30 cm).
 # exposure: auto (with ev compensation) or manual (shutterMs, gain). The rest map to rpicam-vid options.
 AWB_MODES = ["auto", "daylight", "cloudy", "indoor", "fluorescent", "tungsten", "incandescent"]
-DEFAULT_SETTINGS = {"focus": "manual", "lensPosition": 2.0, "exposure": "auto", "ev": 0.0, "shutterMs": 16.667,
+DEFAULT_SETTINGS = {"frameRate": 5, "focus": "manual", "lensPosition": 2.0, "exposure": "auto", "ev": 0.0, "shutterMs": 16.667,
                     "gain": 1.0, "awb": "auto", "brightness": 0.0, "contrast": 1.0}
-SETTING_RANGES = {"lensPosition": (0, 10), "ev": (-8, 8), "shutterMs": (0.1, 200), "gain": (1, 16),
+SETTING_RANGES = {"frameRate": (1, 30), "lensPosition": (0, 10), "ev": (-8, 8), "shutterMs": (0.1, 200), "gain": (1, 16),
                   "brightness": (-1, 1), "contrast": (0, 4)}
 
 KEEP_HOURS = 72          # how far back stored frames go
@@ -68,15 +68,16 @@ def _Iso(t):
 
 def CaptureCommand(device):
     """The child process that writes MJPEG to stdout for this device."""
+    fps = f"{CameraSettings()['frameRate']:g}"
     if device == "pi":
         look = (SettingsArgs(CameraSettings()) if SETTINGS_FILE.exists()
                 else shlex.split(os.environ.get("REPTRACKER_CAMERA_ARGS", DEFAULT_LOOK)))
         return (["rpicam-vid", "--nopreview", "--timeout", "0", "--codec", "mjpeg", "--quality", "80", "--flush",
-                 "--mode", "2304:1296", "--width", "1280", "--height", "720", "--framerate", "5", "--output", "-"] + look)
+                 "--mode", "2304:1296", "--width", "1280", "--height", "720", "--framerate", fps, "--output", "-"] + look)
     if device == "test":   # the stand-in shows brightness and contrast, so the settings visibly do something
         s = CameraSettings()
         return [imageio_ffmpeg.get_ffmpeg_exe(), "-loglevel", "error", "-re", "-stream_loop", "-1", "-i", str(TEST_VIDEO),
-                "-vf", f"fps=5,scale=1280:720,eq=brightness={s['brightness']}:contrast={s['contrast']}",
+                "-vf", f"fps={fps},scale=1280:720,eq=brightness={s['brightness']}:contrast={s['contrast']}",
                 "-f", "mjpeg", "-q:v", "4", "-"]
     raise ValueError(f"Unknown camera device '{device}'; use one of {', '.join(DEVICES)}.")
 

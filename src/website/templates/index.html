@@ -438,6 +438,9 @@ window.swReady = ("serviceWorker" in navigator && window.isSecureContext)
               <p class="hint">One camera per computer: these settings apply to every animal that uses it. Apply shows the change in a few seconds.</p>
             </div>
             <div class="cam-controls">
+              <div class="full" style="grid-column:1/-1"><label for="c-fps">Live frame rate (frames per second)</label>
+                <input id="c-fps" name="camFps" type="number" min="1" max="30" step="1">
+                <p class="hint" style="margin:0">How smooth the live picture is: 1 to 30. Higher uses more of the Pi's CPU and the network. Analyses still use one picture per minute.</p></div>
               <div><label for="c-focus">Focus</label>
                 <select id="c-focus" name="camFocus"><option value="manual">Manual</option><option value="auto">Auto (continuous)</option></select></div>
               <div><label for="c-lens">Focus distance (dioptres)</label>
@@ -1365,7 +1368,6 @@ function tick(forceCharts) {
     const cover = card.querySelector("[data-cover]"), v = card.querySelector("[data-video]"), liveImg = card.querySelector("[data-live]");
     try {   // one card's error must not stop the others
     if (liveImg) {
-      syncLive(liveImg, cover, now, speed);
       card.querySelector("[data-cam-time]").textContent = `${liveImg.dataset.real === "1" && liveImg.dataset.ok === "1" ? "LIVE" : "RECORDED"} · ${fmtTime(now)}`;
     } else {
     card.querySelector("[data-cam-time]").textContent = `${speed === 1 ? "LIVE" : speed === 0 ? "PAUSED" : speed + "×"} · ${fmtTime(now)}`;
@@ -1406,26 +1408,28 @@ $("#lizards").addEventListener("change", e => {
 // The live camera: an <img> that loads one picture at a time. At real time it shows the newest frame, about
 // 5 a second; when the dev clock is paused or off real time, the stored frame for the clock (10 s slots).
 // Every request carries a new &n= so the browser never reuses an earlier picture.
-let liveRequests = 0;
+let liveRequests = 0, liveFps = 5;   // liveFps: the camera's frame rate, from /api/camera
+fetch("/api/camera").then(r => r.ok ? r.json() : null).then(st => { if (st?.settings) liveFps = st.settings.frameRate; }).catch(() => {});
 function syncLive(img, cover, now, speed) {
   if (img.dataset.busy === "1" || +(img.dataset.next || 0) > Date.now()) return;
-  const real = speed === 1 && Math.abs(now - Date.now()) < 2000;
+  const real = speed === 1 && now > Date.now() - 15000;   // running, and not set back into the past
   const slot = real ? "now" : new Date(Math.floor(now / 10000) * 10000).toISOString().replace(/\.\d+Z$/, "Z");
   if (!real && img.dataset.slot === slot) return;          // paused or replaying: only when the slot changes
   img.dataset.busy = "1"; img.dataset.slot = slot;
-  const probe = new Image();
-  probe.onload = () => {
-    img.src = probe.src; img.dataset.ok = "1"; img.dataset.real = real ? "1" : "0";
-    img.dataset.busy = "0"; img.dataset.next = Date.now() + 200; cover.hidden = true;
-  };
-  probe.onerror = () => {
+  // One download per picture: fetch it, then show it from memory (no-store pictures would download twice).
+  fetch(`/media/camera/picture?${real ? "" : `t=${encodeURIComponent(slot)}&`}n=${++liveRequests}`).then(async r => {
+    if (!r.ok) throw new Error(r.status);
+    const url = URL.createObjectURL(await r.blob()), old = img.src;
+    img.src = url; if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+    img.dataset.ok = "1"; img.dataset.real = real ? "1" : "0";
+    img.dataset.busy = "0"; img.dataset.next = Date.now() + Math.max(30, 1000 / liveFps - 20); cover.hidden = true;
+  }).catch(() => {
     img.dataset.ok = "0"; img.dataset.busy = "0"; img.dataset.next = Date.now() + 1000;
     if (!real) img.dataset.slot = "";                         // try that slot again
     cover.hidden = false;
     cover.textContent = real ? "No picture from the live camera right now"
       : `No camera picture for ${fmtTime(now)}. The dev clock is not at real time: set it to now to see the live picture.`;
-  };
-  probe.src = `/media/camera/picture?${real ? "" : `t=${encodeURIComponent(slot)}&`}n=${++liveRequests}`;
+  });
 }
 // Keep the "camera" video at the moment that matches the clock; it loops like a live feed.
 function syncVideo(v, offsetS, speed) {
@@ -1443,6 +1447,14 @@ function syncVideo(v, offsetS, speed) {
   }
 }
 setInterval(() => tick(false), 250);
+// Live cards ask for pictures on their own, faster loop, so the frame rate is not held to tick's 4 a second.
+setInterval(() => {
+  const now = simNow(), speed = clockSpeed();
+  document.querySelectorAll("img[data-live]").forEach(img => {
+    if (!img.offsetParent && !document.fullscreenElement?.contains(img)) return;   // the card's hidden view
+    try { syncLive(img, img.parentElement.querySelector("[data-cover]"), now, speed); } catch (err) { console.error(err); }
+  });
+}, 30);
 
 /* ================= Dev mode ================= */
 function renderDevBar() {
@@ -1679,7 +1691,7 @@ async function loadCameraSettings() {
   try {
     const st = await readResponse(await fetch("/api/camera")), s = st.settings;
     f.camAwb.innerHTML = st.awbModes.map(m => `<option value="${m}">${m[0].toUpperCase() + m.slice(1)}</option>`).join("");
-    f.camFocus.value = s.focus; f.camLens.value = s.lensPosition; f.camExposure.value = s.exposure; f.camEv.value = s.ev;
+    liveFps = s.frameRate; f.camFps.value = s.frameRate; f.camFocus.value = s.focus; f.camLens.value = s.lensPosition; f.camExposure.value = s.exposure; f.camEv.value = s.ev;
     f.camShutter.value = s.shutterMs; f.camGain.value = s.gain; f.camAwb.value = s.awb;
     f.camBrightness.value = s.brightness; f.camContrast.value = s.contrast;
     showCameraControls();
@@ -1695,7 +1707,7 @@ function showCameraControls() {
 async function applyCameraSettings() {
   const f = addForm.elements;
   await readResponse(await fetch("/api/camera/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
-    focus: f.camFocus.value, lensPosition: f.camLens.value, exposure: f.camExposure.value, ev: f.camEv.value,
+    frameRate: f.camFps.value, focus: f.camFocus.value, lensPosition: f.camLens.value, exposure: f.camExposure.value, ev: f.camEv.value,
     shutterMs: f.camShutter.value, gain: f.camGain.value, awb: f.camAwb.value, brightness: f.camBrightness.value, contrast: f.camContrast.value,
   }) }));
 }
@@ -1706,7 +1718,7 @@ addForm.addEventListener("change", e => {
 addForm.addEventListener("input", e => { if (e.target.type === "range") showCameraControls(); });
 $("#cam-apply").addEventListener("click", async () => {
   const btn = $("#cam-apply"); btn.disabled = true; $("#cam-msg").textContent = "Applying…";
-  try { await applyCameraSettings(); $("#cam-msg").textContent = "Applied. The picture changes in a few seconds."; }
+  try { await applyCameraSettings(); liveFps = +addForm.elements.camFps.value; $("#cam-msg").textContent = "Applied. The picture changes in a few seconds."; }
   catch (x) { $("#cam-msg").textContent = x.message; }
   btn.disabled = false;
 });
@@ -1715,14 +1727,14 @@ let camPreviewN = 0;
 (function previewLoop() {
   const box = $("#cam-preview"), shown = !addForm.hidden && addForm.elements.source.value === "live";
   if (!shown) return setTimeout(previewLoop, 500);
-  const probe = new Image();
-  probe.onload = () => {
+  fetch(`/media/camera/picture?n=${++camPreviewN}`).then(async r => {
+    if (!r.ok) throw new Error(r.status);
     let img = box.querySelector("img");
     if (!img) { box.innerHTML = `<img alt="Camera preview">`; img = box.querySelector("img"); }
-    img.src = probe.src; setTimeout(previewLoop, 300);
-  };
-  probe.onerror = () => { box.innerHTML = "<span>No picture from the camera right now</span>"; setTimeout(previewLoop, 1000); };
-  probe.src = `/media/camera/picture?n=${++camPreviewN}`;
+    const url = URL.createObjectURL(await r.blob()), old = img.src;
+    img.src = url; if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+    setTimeout(previewLoop, Math.max(30, 1000 / liveFps - 20));
+  }).catch(() => { box.innerHTML = "<span>No picture from the camera right now</span>"; setTimeout(previewLoop, 1000); });
 })();
 // Adding (or editing to) a species with no profile researches it first, so the animal's card starts from its
 // profile. If research fails, nothing is added; "Add without a profile" goes ahead anyway.

@@ -128,7 +128,7 @@ The live camera, one per computer. Source: `docs/notes/2026-11-15-live-camera-ch
 | `LatestFrame` | The newest frame, in memory | → (time, jpeg) / None |
 | `PruneFrames` | Deletes frames older than 72 h (`KEEP_HOURS`) | now → none |
 | `CameraStatus` | Device, running, last frame time, error, retention, server time, picture settings | → dict |
-| `CameraSettings` / `CheckSettings` / `SaveCameraSettings` | The picture settings (focus, exposure, white balance, brightness, contrast) in `data/camera/settings.json`: read with defaults, validate, save and restart capture | dict → dict |
+| `CameraSettings` / `CheckSettings` / `SaveCameraSettings` | The picture settings (frame rate, focus, exposure, white balance, brightness, contrast) in `data/camera/settings.json`: read with defaults, validate, save and restart capture | dict → dict |
 | `SettingsArgs` | `rpicam-vid` options for the picture settings | settings → argv |
 | `RestartCapture` | Restarts the capture child at once (new settings) | → none |
 

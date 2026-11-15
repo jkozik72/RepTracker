@@ -181,9 +181,13 @@ class CameraSettingsTest(unittest.TestCase):
         self.assertEqual(cmd[cmd.index("--shutter") + 1], "16667")
         self.assertEqual(cmd[cmd.index("--awb") + 1], "daylight")
         self.assertEqual(camera.CameraSettings()["gain"], 2.0)
+        camera.SaveCameraSettings({"frameRate": 15})
+        cmd = camera.CaptureCommand("pi")
+        self.assertEqual(cmd[cmd.index("--framerate") + 1], "15")
+        self.assertIn("fps=15,", " ".join(camera.CaptureCommand("test")))
 
     def test_bad_values_are_refused(self):
-        for bad in ({"gain": 40}, {"awb": "purple"}, {"focus": "maybe"}, {"brightness": "x"}):
+        for bad in ({"gain": 40}, {"frameRate": 60}, {"awb": "purple"}, {"focus": "maybe"}, {"brightness": "x"}):
             with self.assertRaises(ValueError):
                 camera.SaveCameraSettings(bad)
         self.assertFalse(camera.SETTINGS_FILE.exists())
