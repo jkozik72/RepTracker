@@ -112,7 +112,7 @@
     },
     "Notable moments": {
       "type": "array",
-      "description": "interesting moments that are neither good nor bad, for the keeper's notifications: for example started shedding, very active, drank, dug, came out of the hide; an empty list if nothing",
+      "description": "rare events worth a notification to the keeper, neither good nor bad: started shedding, drank, soaked, dug or burrowed, came out after a long rest, mating or egg-laying behaviour, something unusual. Not routine movement (walking, climbing, moving between sides, hides or the basking spot): the movement graph already shows that. Usually an empty list; at most 2",
       "items": {
         "type": "object",
         "additionalProperties": false,

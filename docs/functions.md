@@ -74,7 +74,8 @@ Every function that touches lizard data takes `mode` first: `toy` or `main`, eac
 | `UpdateProfile` / `DeleteProfile` / `GetProfile` / `ListProfiles` | A keeper's edit (marks it checked); delete with its photos; one profile; all profiles, each with the animals that use it | |
 | `AddFeeding` / `DeleteFeeding` | The feeding log (`reptiles/<id>/feedings.json`, time order): when, food, amount, notes | |
 | `FeedingContext` | The feeding log as the AI sees it, relative to the end of the analysed range | mode, id, end → text |
-| `Notifications` | Neutral events, newest first: AI notable moments, eating, droppings, changes between analyses, feedings | analyses, feedings → list |
+| `Notifications` | Neutral events, newest first: AI notable moments (at most 2 per analysis, routine movement left out by `NotableMoment`), eating, droppings, changes between analyses, feedings | analyses, feedings → list |
+| `NotableMoment` | Whether an AI notable moment is worth a notification: not routine movement (walked, climbed, moved to a side), unless it names an event (shed, drank, dug, ate...) | note → bool |
 | `MovementData` | Every analysed position of an animal with the seconds each image stands for | mode, id → `{points: [{t, p, w}], positionMax, unit, hotSide}` |
 | `GenerateSensors` | Dev mode: four sensor files for a mode from a profile's ranges and a pattern | mode, slug, pattern → names |
 | `RemoveLizard` | Takes a lizard off `reptiles.json`; its folder stays | mode, id → none |

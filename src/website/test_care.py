@@ -81,6 +81,19 @@ class NotificationsTest(unittest.TestCase):
         self.assertEqual([n["time"] for n in notes], sorted((n["time"] for n in notes), reverse=True))
 
 
+class QuietNotificationsTest(unittest.TestCase):
+    def test_routine_movement_is_dropped_and_at_most_two_per_analysis(self):
+        moments = [{"time": f"2026-11-15 07:{m:02d} UTC", "note": note} for m, note in [
+            (18, "Cheeto climbed along the branch in the middle of the enclosure."),
+            (22, "Cheeto moved toward the right-hand hide, with only its tail visible at the edge."),
+            (24, "Cheeto was active on the substrate near the right side."),
+            (30, "Started shedding: the skin looks dull."),
+            (33, "Drank from the water bowl."),
+            (35, "Dug under the hide.")]]
+        notes = main.Notifications([{"range": {"end": "2026-11-15T08:00:00Z"}, "result": {"Notable moments": moments}}], [])
+        self.assertEqual([n["text"] for n in notes], ["Drank from the water bowl.", "Started shedding: the skin looks dull."])
+
+
 class FeedingAndMovementTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
