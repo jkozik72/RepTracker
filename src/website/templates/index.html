@@ -1412,17 +1412,23 @@ $("#lizards").addEventListener("change", e => {
 // the camera's frame rate. The camera's status, polled every 2 s, says whether frames are arriving; when they
 // stop, the stream is closed and the cover says so, and it starts again when they come back.
 let liveRequests = 0, liveFps = 5, liveStatus = null;
+let liveStatusBusy = false;
 function refreshLiveStatus() {
-  fetch("/api/camera").then(r => r.ok ? r.json() : null).then(st => {
+  if (liveStatusBusy) return;   // one check at a time
+  liveStatusBusy = true;
+  fetch("/api/camera").finally(() => { liveStatusBusy = false; }).then(r => r.ok ? r.json() : null).then(st => {
     if (!st) return;
     liveStatus = { ...st, receivedAt: Date.now() };
     if (st.settings) liveFps = st.settings.frameRate;
   }).catch(() => {});
 }
 refreshLiveStatus(); setInterval(refreshLiveStatus, 2000);
+// A stream is closed only when a recent status says the camera has stopped (no frame for 8 s, which also rides
+// out the few seconds a settings change restarts it). A slow or missed status check changes nothing.
 function liveIsFresh() {
-  return !!(liveStatus?.lastFrameAt && Date.now() - liveStatus.receivedAt < 6000
-            && Date.parse(liveStatus.serverTime) - Date.parse(liveStatus.lastFrameAt) < 5000);
+  if (!liveStatus || Date.now() - liveStatus.receivedAt > 10000) return true;
+  if (liveStatus.device === "off") return false;
+  return !!liveStatus.lastFrameAt && Date.parse(liveStatus.serverTime) - Date.parse(liveStatus.lastFrameAt) < 8000;
 }
 function startStream(img, cover) {
   img.dataset.mode = "stream"; img.dataset.real = "1";
@@ -1722,7 +1728,9 @@ function showSource() {
   addForm.querySelectorAll("[data-source]").forEach(el => el.hidden = el.dataset.source !== (live ? "live" : "video"));
   if (live) loadCameraSettings();
 }
+let cameraDirty = false;   // the form's camera settings differ from what was loaded from the camera
 async function loadCameraSettings() {
+  cameraDirty = false;
   const f = addForm.elements;
   try {
     const st = await readResponse(await fetch("/api/camera")), s = st.settings;
@@ -1749,12 +1757,12 @@ async function applyCameraSettings() {
 }
 addForm.addEventListener("change", e => {
   if (e.target.name === "source") showSource();
-  if (e.target.name?.startsWith("cam")) showCameraControls();
+  if (e.target.name?.startsWith("cam")) { cameraDirty = true; showCameraControls(); }
 });
-addForm.addEventListener("input", e => { if (e.target.type === "range") showCameraControls(); });
+addForm.addEventListener("input", e => { if (e.target.name?.startsWith("cam")) cameraDirty = true; if (e.target.type === "range") showCameraControls(); });
 $("#cam-apply").addEventListener("click", async () => {
   const btn = $("#cam-apply"); btn.disabled = true; $("#cam-msg").textContent = "Applying…";
-  try { await applyCameraSettings(); liveFps = +addForm.elements.camFps.value; $("#cam-msg").textContent = "Applied. The picture changes in a few seconds."; }
+  try { await applyCameraSettings(); cameraDirty = false; liveFps = +addForm.elements.camFps.value; $("#cam-msg").textContent = "Applied. The camera restarts: the picture changes in a few seconds."; }
   catch (x) { $("#cam-msg").textContent = x.message; }
   btn.disabled = false;
 });
@@ -1779,7 +1787,7 @@ addForm.addEventListener("submit", async e => {
   e.preventDefault();
   const f = addForm.elements, submit = $("#form-submit"), label = submit.textContent;
   addErr.hidden = true;
-  if (f.source.value === "live") {
+  if (f.source.value === "live" && cameraDirty) {   // only settings changed in this form; never overwrite with stale ones
     try { await applyCameraSettings(); }
     catch (x) { addErr.textContent = `Camera settings: ${x.message}`; addErr.hidden = false; return; }
   }

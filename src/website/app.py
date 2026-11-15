@@ -282,6 +282,9 @@ def camera_stream():
     """The live camera as an MJPEG stream (multipart/x-mixed-replace): every frame is pushed as the camera makes
     it, so an <img> shows the camera's full frame rate without a request per picture. Ends after 10 s without a
     frame; the page then starts it again."""
+    if not camera.OpenStream():
+        return jsonify({"error": f"Too many live views open (at most {camera.MAX_STREAMS}); close some tabs."}), 503
+
     def Frames():
         last = None
         while True:
@@ -290,8 +293,10 @@ def camera_stream():
                 return
             last = frame[0]
             yield b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n%s\r\n" % (len(frame[1]), frame[1])
-    return app.response_class(Frames(), mimetype="multipart/x-mixed-replace; boundary=frame",
-                              headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+    response = app.response_class(Frames(), mimetype="multipart/x-mixed-replace; boundary=frame",
+                                  headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+    response.call_on_close(camera.CloseStream)   # runs however the response ends, even before the first frame
+    return response
 
 
 @app.get("/media/camera/picture")
@@ -505,7 +510,8 @@ def ServeLan(port, redirectPort):
         plain = wsgi.Server(("0.0.0.0", redirectPort), redirect_app, numthreads=2)
         threading.Thread(target=plain.safe_start, daemon=True).start()
     scheduler.Start()
-    server = wsgi.Server(("0.0.0.0", port), app, numthreads=16, timeout=600)
+    # Each open live camera view holds a thread for its stream (camera.MAX_STREAMS), so there are plenty.
+    server = wsgi.Server(("0.0.0.0", port), app, numthreads=48, timeout=600)
     server.ssl_adapter = BuiltinSSLAdapter(cert, key)
     server.safe_start()
 

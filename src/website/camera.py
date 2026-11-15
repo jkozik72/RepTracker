@@ -221,6 +221,26 @@ def LatestFrame():
     return _latest
 
 
+MAX_STREAMS = 24          # open live views at once; each holds a server thread
+_streams = 0
+
+
+def OpenStream():
+    """Count one more open live view; False when there are already MAX_STREAMS."""
+    global _streams
+    with _lock:
+        if _streams >= MAX_STREAMS:
+            return False
+        _streams += 1
+        return True
+
+
+def CloseStream():
+    global _streams
+    with _lock:
+        _streams = max(0, _streams - 1)
+
+
 def WaitForFrame(after=None, timeout=10):
     """Block until there is a frame newer than the one taken at `after`; returns (time, jpeg) or None on timeout."""
     with _newFrame:

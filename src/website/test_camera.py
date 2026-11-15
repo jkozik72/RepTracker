@@ -233,6 +233,18 @@ class PictureRouteTest(unittest.TestCase):
         self.assertEqual(self.client.get("/media/camera/picture?t=2026-11-15T11:00:00Z").status_code, 404)
         self.assertEqual(self.client.get("/api/camera").get_json()["device"], "off")
 
+    def test_stream_counts_open_views(self):
+        self.client.post("/login", data={"username": "ann", "password": "long-enough-1", "confirm": "long-enough-1"})
+        with mock.patch.object(camera, "_latest", (datetime.now(timezone.utc), Jpeg())), \
+             mock.patch.object(camera, "WaitForFrame", side_effect=[(T0, Jpeg()), None]):
+            r = self.client.get("/media/camera/stream")
+            self.assertTrue(r.mimetype.startswith("multipart/x-mixed-replace"))
+            self.assertEqual(r.data.count(b"--frame"), 1)
+            r.close()
+        self.assertEqual(camera._streams, 0)                              # counted back down when it ended
+        with mock.patch.object(camera, "_streams", camera.MAX_STREAMS):
+            self.assertEqual(self.client.get("/media/camera/stream").status_code, 503)
+
 
 if __name__ == "__main__":
     unittest.main()
