@@ -459,10 +459,11 @@ def LoadBundle(mode, lizardId, bundleId):
 
 # ---------- AI providers ----------
 # A provider is two functions with fixed signatures, registered under one name:
-#   PROVIDERS[name](folder, manifest, config) -> a dict shaped like prompts/response-schema.json
+#   PROVIDERS[name](folder, manifest, config) -> a dict shaped like prompts/response-schema.json,
+#                                                 plus an optional "_details" dict (see DETAIL_KEYS)
 #   ASKERS[name](prompt, latest, sensorsNow)  -> the answer to a keeper's question, as text
 # "mock" runs offline so the whole loop can be tested without an AI. "gemini" is the real one
-# (ai.py). The provider in use is chosen in Settings and saved in data/ai-settings.json.
+# (ai.py). The provider in use is chosen in Settings (dev mode) and saved in data/ai-settings.json.
 
 def _MockPosition(img, widthCm):
     """Mock-only stand-in for the AI: x of the dark pixels (the sample lizard is the darkest thing)."""
@@ -526,6 +527,7 @@ PROVIDERS = {"mock": MockProvider, "gemini": GeminiProvider}
 ASKERS = {"mock": MockAnswer, "gemini": GeminiAnswer}
 PROVIDER_LABELS = {"mock": "Mock (offline, not a real AI)", "gemini": "Gemini (Google Vertex AI)"}
 DEFAULT_PROVIDER = "mock"   # works on any computer; switch to Gemini in Settings
+DETAIL_KEYS = ["model", "seconds", "tokens", "notes"]   # what a provider may add to a saved analysis
 
 
 def CurrentProvider():
@@ -572,8 +574,9 @@ def SendPrompt(mode, lizardId, bundleId):
     config = LoadConfig(mode, lizardId)
     provider = CurrentProvider()
     result = PROVIDERS[provider](folder, manifest, config)
-    details = result.pop("_details", {})   # optional extras from the provider: model, token counts, notes
-    entry = {"bundleId": bundleId, "provider": provider, **details, "range": manifest["range"],
+    details = result.pop("_details", None) or {}
+    entry = {"bundleId": bundleId, "provider": provider,
+             **{key: details[key] for key in DETAIL_KEYS if key in details}, "range": manifest["range"],
              "sentAt": FormatTime(datetime.now(timezone.utc)), "result": result}
     path = LizardFolder(mode, lizardId) / "analyses.json"
     analyses = ReadJson(path, [])

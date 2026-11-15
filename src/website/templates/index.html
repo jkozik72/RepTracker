@@ -101,7 +101,8 @@
   .analysis p { margin: 0 0 6px; } .analysis ul { margin: 4px 0 0; padding-left: 18px; }
   .ask form { display: flex; gap: 8px; }
   .chat { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; max-height: 220px; overflow-y: auto; font-size: 14px; }
-  .chat .q { font-weight: 600; } .chat .a { color: var(--muted); }
+  .chat .q { font-weight: 600; } .chat .a { color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .chat .a.err { color: var(--bad); font-weight: 600; }
   .chat details summary { font-size: 12px; color: var(--muted); cursor: pointer; }
   .charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .chart svg { width: 100%; height: auto; display: block; overflow: visible; }
@@ -301,16 +302,6 @@
         <span><strong>Dev mode</strong><br><span class="hint" style="margin:0">Clock controls above the alerts (speed, set time, pause, resume), a prompt inspector on each lizard, Toy / Main data, and uploads.</span></span>
       </label>
 
-      <div id="ai-settings">
-        <h2>AI provider</h2>
-        <div id="ai-providers" role="radiogroup" aria-label="AI provider"></div>
-        <div class="form-actions" style="justify-content:flex-start;margin-top:10px">
-          <button class="btn" type="button" id="ai-test">Test connection</button>
-          <span class="hint" style="margin:0">Sends one short request to the provider in use.</span>
-        </div>
-        <p class="error" id="ai-error" hidden></p><p class="ok-msg" id="ai-ok" hidden></p>
-      </div>
-
       <div class="dev-settings" id="dev-settings" hidden>
         <div>
           <h2>Data</h2>
@@ -319,6 +310,17 @@
             <button type="button" data-mode="main">Main mode</button>
           </div>
           <p class="hint"><strong>Toy</strong>: sample lizards, videos and sensors. <strong>Main</strong>: starts empty; upload media and add your lizards. With dev mode off, the dashboard shows Main.</p>
+        </div>
+
+        <div id="ai-settings">
+          <h2>AI provider</h2>
+          <div id="ai-providers" role="radiogroup" aria-label="AI provider"></div>
+          <div class="form-actions" style="justify-content:flex-start;margin-top:10px">
+            <button class="btn" type="button" id="ai-test">Test connection</button>
+            <span class="hint" style="margin:0">Sends one short request to the provider in use. “Ready” only means it is set up on this computer; this proves it works.</span>
+          </div>
+          <p class="error" id="ai-error" hidden></p><p class="ok-msg" id="ai-ok" hidden></p>
+          <p class="hint">One choice for this computer, used for analyses and questions in Toy and Main, with dev mode on or off.</p>
         </div>
 
         <div>
@@ -395,13 +397,14 @@ async function api(method, path, body) {
 let media = { videos: [], sensors: [] };
 let lizards = [];                 // [{id, config, latest}]
 // The AI provider is one choice for this computer, not per mode: {provider, providers: [{name, label, ready, detail}]}
-let ai = { provider: "mock", providers: [] };
+let ai = { provider: null, providers: [] };   // provider is null until the server has answered
 async function aiApi(method, path, body) {
   return readResponse(await fetch(`/api/ai${path}`, {
     method, headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined,
   }));
 }
-const sendLabel = () => `Send to AI (${ai.provider})`;
+const sendLabel = () => ai.provider ? `Send to AI (${ai.provider})` : "Send to AI";
+const realAi = () => !!ai.provider && ai.provider !== "mock";
 const seriesCache = {};           // "mode/name" -> Promise<{step, v}>
 
 // Sensor file: {"t": ms between samples, "value": [samples]}
@@ -495,13 +498,14 @@ function renderAnalysis(l) {
   return `<p>${esc(r.Analysis || "")}</p>
     ${alerts.length ? `<p style="color:var(--bad);font-weight:600;margin-top:8px">Needs attention:</p><ul>${alerts.map(a => `<li>${esc(a)}</li>`).join("")}</ul>`
                     : `<p style="color:var(--ok);font-weight:600">No hazards reported.</p>`}
-    <p class="hint">Range ${esc(fmtShort(Date.parse(l.latest.range.start)))} – ${esc(fmtShort(Date.parse(l.latest.range.end)))} · provider: ${esc(l.latest.provider)}${l.latest.model ? ` (${esc(l.latest.model)})` : ""}</p>`;
+    <p class="hint">Range ${esc(fmtShort(Date.parse(l.latest.range.start)))} – ${esc(fmtShort(Date.parse(l.latest.range.end)))} · provider: ${esc(l.latest.provider)}${l.latest.model ? ` (${esc(l.latest.model)})` : ""}${l.latest.seconds != null ? ` · ${esc(l.latest.seconds)} s` : ""}${l.latest.tokens && l.latest.tokens.total != null ? ` · ${esc(Number(l.latest.tokens.total).toLocaleString())} tokens` : ""}</p>
+    ${(l.latest.notes || []).map(n => `<p class="hint">ⓘ ${esc(n)}</p>`).join("")}`;
 }
 
 function renderLizard(l) {
   if (settings.view === "compact") return renderCompactLizard(l);
   const c = l.config, s = getStatus(l), r = l.latest ? l.latest.result : {};
-  const ai = k => `<dd class="cap">${esc(r[k] ?? "—")}</dd>`;
+  const stat = k => `<dd class="cap">${esc(r[k] ?? "—")}</dd>`;
   const sensorStats = channels(c).map((ch, i) =>
     `<div class="stat ${ch.key}"><dt>${ch.key === "hot" ? "Hot" : "Cold"} (${ch.side}) ${ch.kind === "temperature" ? "temp" : "humidity"}</dt><dd data-sensor="${i}">—</dd></div>`).join("");
   const def = simNow();
@@ -518,10 +522,10 @@ function renderLizard(l) {
     <div>
       <h2>Stats</h2>
       <dl class="stats">
-        <div class="stat"><dt>Current activity</dt>${ai("Current activity")}</div>
-        <div class="stat"><dt>Weight</dt>${ai("Weight")}</div>
-        <div class="stat"><dt>Shed</dt>${ai("Shed")}</div>
-        <div class="stat"><dt>Food in bowl</dt>${ai("Food in bowl")}</div>
+        <div class="stat"><dt>Current activity</dt>${stat("Current activity")}</div>
+        <div class="stat"><dt>Weight</dt>${stat("Weight")}</div>
+        <div class="stat"><dt>Shed</dt>${stat("Shed")}</div>
+        <div class="stat"><dt>Food in bowl</dt>${stat("Food in bowl")}</div>
         ${sensorStats}
       </dl>
       <p class="hint">Temperature and humidity are live sensor readings; the rest is from the latest AI analysis.</p>
@@ -592,6 +596,9 @@ function lineChart({ series, xMin, xMax, yMin, yMax, xFmt, yLabel, height = 170,
     let d = "", pen = false;
     for (const [x, y] of s.points) { if (y == null) { pen = false; continue; } d += `${pen ? "L" : "M"}${sx(x).toFixed(1)},${sy(y).toFixed(1)}`; pen = true; }
     g += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"><title>${esc(s.name)}</title></path>`;
+    s.points.forEach(([x, y], i) => {
+      if (y != null && s.points[i - 1]?.[1] == null && s.points[i + 1]?.[1] == null) g += `<circle cx="${sx(x).toFixed(1)}" cy="${sy(y).toFixed(1)}" r="3" fill="${s.color}"/>`;
+    });
   }
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(yLabel)}">${g}</svg>`;
 }
@@ -634,6 +641,8 @@ async function renderSensorCharts(card, l, now) {
 function renderPositionChart(l) {
   const md = l.latest && l.latest.result["Movement Data"];
   if (!md || !md.length) return `<p class="hint" style="margin:0">No position data yet. It comes from the AI analysis (cm from the left wall).</p>`;
+  const seen = md.filter(m => m.position_cm != null).length;
+  if (!seen) return `<p class="hint" style="margin:0">The latest analysis gave no position for any of its ${md.length} image${md.length === 1 ? "" : "s"}.</p>`;
   const W = l.config.enclosureWidthCm;
   return lineChart({
     series: [{ name: "position", color: "var(--line)", points: md.map((m, i) => [i, m.position_cm]) }],
@@ -641,7 +650,7 @@ function renderPositionChart(l) {
     yTicks: [0, W / 4, W / 2, 3 * W / 4, W],
     xFmt: i => (md[Math.round(i)] || {}).time?.replace(/^\d{4}-\d\d-\d\d /, "").replace(" UTC", "") || "",
     yLabel: "Position, cm from the left wall"
-  }) + `<p class="hint" style="margin:2px 0 0">cm from the left wall (0 = left, ${W} = right; hot side ${esc(l.config.sensors.hotSide)}) · one point per image, UTC</p>`;
+  }) + `<p class="hint" style="margin:2px 0 0">cm from the left wall (0 = left, ${W} = right; hot side ${esc(l.config.sensors.hotSide)}) · one point per image, UTC${seen < md.length ? ` · position given for ${seen} of ${md.length} images; gaps are images without one` : ""}</p>`;
 }
 
 /* ================= Real-time loop: camera + sensors ================= */
@@ -740,8 +749,9 @@ async function showBundle(card, lizardId, m) {
       </div>`).join("")}
     <div class="form-actions" style="justify-content:flex-start">
       <button class="btn dev" type="button" data-action="send" data-bundle="${esc(m.bundleId)}">${esc(sendLabel())}</button>
-      <span class="hint" style="margin:0">Updates the stats, analysis and position graph.</span>
-    </div>`;
+      <span class="hint" style="margin:0" data-send-hint>Updates the stats, analysis and position graph.</span>
+    </div>
+    <p class="error" data-send-error hidden></p>`;
 }
 
 /* ================= Events ================= */
@@ -762,13 +772,19 @@ $("#lizards").addEventListener("click", async e => {
   }
   const send = e.target.closest("[data-action='send']");
   if (send) {
-    const err = card.querySelector("[data-dev-error]");
-    send.disabled = true; send.textContent = ai.provider === "mock" ? "Sending…" : "Sending… a real AI call can take a minute"; err.hidden = true;
+    const err = card.querySelector("[data-send-error]"), hint = card.querySelector("[data-send-hint]"), idle = hint.textContent;
+    const started = Date.now();
+    send.disabled = true; send.textContent = "Sending…"; err.hidden = true;
+    // A real AI call can take a minute or more: show that something is happening.
+    const timer = realAi() ? setInterval(() => {
+      hint.textContent = `Waiting for the AI: ${Math.round((Date.now() - started) / 1000)} s. A real analysis can take a minute or more; keep this page open.`;
+    }, 1000) : null;
     try {
       const entry = await api("POST", `/lizards/${id}/prompts/${send.dataset.bundle}/send`);
       replaceLizard({ ...l, latest: entry });
       document.getElementById(`lizard-${id}`).querySelector(".analysis").scrollIntoView({ behavior: "smooth", block: "center" });
-    } catch (x) { err.textContent = x.message; err.hidden = false; send.disabled = false; send.textContent = sendLabel(); }
+    } catch (x) { err.textContent = x.message; err.hidden = false; send.disabled = false; send.textContent = sendLabel(); hint.textContent = idle; }
+    clearInterval(timer);
   }
 });
 
@@ -778,12 +794,12 @@ $("#lizards").addEventListener("submit", async e => {
   if (form.matches("[data-action='ask']")) {
     const q = form.q.value.trim(); if (!q) return;
     const chat = card.querySelector("[data-chat]"), li = document.createElement("li");
-    li.innerHTML = `<div class="q">${esc(q)}</div><div class="a">…</div>`;
+    li.innerHTML = `<div class="q">${esc(q)}</div><div class="a">${realAi() ? "Asking the AI…" : "…"}</div>`;
     chat.appendChild(li); form.q.value = "";
     try {
       const res = await api("POST", `/lizards/${id}/ask`, { question: q, now: new Date(simNow()).toISOString() });
-      li.innerHTML = `<div class="q">${esc(q)}</div><div class="a">${esc(res.answer)}</div><details><summary>Prompt sent</summary><pre>${esc(res.prompt)}</pre></details>`;
-    } catch (x) { li.querySelector(".a").textContent = x.message; }
+      li.innerHTML = `<div class="q">${esc(q)}</div><div class="a">${esc(res.answer)}</div><details><summary>Prompt sent to ${esc(res.provider)}</summary><pre>${esc(res.prompt)}</pre></details>`;
+    } catch (x) { const a = li.querySelector(".a"); a.textContent = x.message; a.classList.add("err"); }
     chat.scrollTop = chat.scrollHeight;
   }
   if (form.matches("[data-action='generate']")) {
@@ -853,6 +869,7 @@ addForm.addEventListener("submit", async e => {
 const tabs = [...document.querySelectorAll(".tab")];
 function selectTab(tab) {
   tabs.forEach(t => { const on = t === tab; t.setAttribute("aria-selected", on); t.tabIndex = on ? 0 : -1; document.getElementById(t.getAttribute("aria-controls")).hidden = !on; });
+  if (tab.id === "tab-settings") loadAi();   // re-check, e.g. after signing in to Google in a terminal
 }
 tabs.forEach(t => {
   t.addEventListener("click", () => selectTab(t));
@@ -863,7 +880,13 @@ tabs.forEach(t => {
   });
 });
 
-/* Settings: AI provider (saved on the server, so it survives reloads and is the same in Toy and Main) */
+/* Settings: AI provider (saved on the server, so it survives reloads and is the same in Toy and Main).
+   Loaded on its own, so a slow or failing status check never delays or hides the lizards. */
+async function loadAi() {
+  try { ai = await aiApi("GET", ""); }
+  catch (x) { aiMessage("error", `Couldn't read the AI provider status: ${x.message}`); }
+  renderAi();
+}
 function renderAi() {
   $("#ai-providers").innerHTML = ai.providers.map(p => `
     <label class="provider"><input type="radio" name="ai-provider" value="${esc(p.name)}" ${p.name === ai.provider ? "checked" : ""}>
@@ -881,14 +904,16 @@ $("#ai-providers").addEventListener("change", async e => {
   try {
     ai = await aiApi("POST", "", { provider: e.target.value });
     aiMessage("ok", `Using ${ai.providers.find(p => p.name === ai.provider).label}.`);
-  } catch (x) { aiMessage("error", x.message); }
-  renderAi();
+    renderAi();
+  } catch (x) { await loadAi(); aiMessage("error", x.message); }   // refused: show the fresh status and the reason
 });
 $("#ai-test").addEventListener("click", async e => {
   const btn = e.currentTarget;
   btn.disabled = true; btn.textContent = "Testing…"; aiMessage();
-  try { aiMessage("ok", (await aiApi("POST", "/test")).message); }
-  catch (x) { aiMessage("error", x.message); }
+  let result;
+  try { result = ["ok", (await aiApi("POST", "/test")).message]; }
+  catch (x) { result = ["error", x.message]; }
+  await loadAi(); aiMessage(...result);   // a failed test can change the status (an expired sign-in, for example)
   btn.disabled = false; btn.textContent = "Test connection";
 });
 
@@ -936,15 +961,16 @@ async function loadMode() {
   $("#load-error").hidden = true;
   closeAdd();
   try {
-    [media, lizards, ai] = await Promise.all([api("GET", "/media"), api("GET", "/lizards"), aiApi("GET", "")]);
+    [media, lizards] = await Promise.all([api("GET", "/media"), api("GET", "/lizards")]);
   } catch (x) {
     media = { videos: [], sensors: [] }; lizards = [];
     $("#load-error").textContent = `Couldn't reach the RepTracker server: ${x.message}. Run app.py and open http://127.0.0.1:5000.`;
     $("#load-error").hidden = false;
   }
-  renderDevBar(); renderSettings(); renderAi(); renderViewToggle(); renderLizards();
+  renderDevBar(); renderSettings(); renderViewToggle(); renderLizards();
 }
 loadMode();
+loadAi();
 </script>
 </body>
 </html>

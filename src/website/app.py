@@ -1,4 +1,5 @@
 from flask import Flask, jsonify, render_template, request, send_from_directory
+from werkzeug.exceptions import HTTPException
 
 import main
 from main import RepTrackerError
@@ -15,6 +16,16 @@ def handle_error(err):
 @app.errorhandler(413)
 def too_large(err):
     return jsonify({"error": "File is larger than 500 MB."}), 413
+
+
+@app.errorhandler(Exception)
+def unexpected(err):
+    """A bug or an error nobody planned for: the page gets a sentence, the terminal gets the details."""
+    if isinstance(err, HTTPException):
+        return err
+    app.logger.exception("Unexpected error")
+    return jsonify({"error": f"Unexpected error in the server ({type(err).__name__}). "
+                             "The details are in the terminal that runs app.py."}), 500
 
 
 @app.route("/")

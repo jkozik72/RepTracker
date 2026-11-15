@@ -58,7 +58,7 @@ Grouped by module or file. Entry format:
 
 ### `src/website/main.py`
 
-Names follow the existing PascalCase in this file. Source for the behaviour: `docs/notes/2026-11-14-dashboard-plan-chat.md`, `docs/notes/2026-11-14-dashboard-changes-chat.md`.
+Names follow the existing PascalCase in this file. Source for the behaviour: `docs/notes/2026-11-14-dashboard-plan-chat.md`, `docs/notes/2026-11-14-dashboard-changes-chat.md`; for the provider functions, `docs/notes/2026-11-15-gemini-provider-chat.md`.
 
 Every function that touches lizard data takes `mode` first: `toy` or `main`, each under `data/<mode>/` (`ModeRoot`).
 
@@ -77,9 +77,36 @@ Every function that touches lizard data takes `mode` first: `toy` or `main`, eac
 | `ParsePDF` | Images into one PDF, one page each, labelled with its timestamp | images, labels, path → PDF file |
 | `FillTemplate` | Fills `{{key}}` in a file from `prompts/` | file name, values → text |
 | `GeneratePrompts` | Builds the lizard's prompt chunk for a range: context + one IMAGES chunk per 60 images (1/min); writes a bundle with `manifest.json` | mode, id, start, end (ISO) → manifest |
-| `SendPrompt` | Sends a bundle to `PROVIDER` (Mock until Q11), appends the answer to `analyses.json` | mode, id, bundle id → analysis entry |
+| `SendPrompt` | Sends a bundle to the provider in use and appends the answer to `analyses.json`. Saves nothing if the provider fails | mode, id, bundle id → analysis entry: `{bundleId, provider, range, sentAt, result}`, plus `model`, `seconds`, `tokens`, `notes` when the provider gives them |
 | `MockProvider` | Offline stand-in for the AI (Q11): position from the darkest pixels of each frame, every other field "can't see" | bundle → schema-shaped result |
-| `AskQuestion` | Answers a keeper's question from `prompts/ask.txt` | mode, id, question, now → `{answer, prompt}` |
+| `GeminiProvider` | The real provider being tried (Q11): hands the bundle to `ai.AnalyzeBundle` | bundle → schema-shaped result with `_details` |
+| `AskQuestion` | Answers a keeper's question from `prompts/ask.txt` with the provider in use | mode, id, question, now → `{answer, prompt, provider}` |
+| `CurrentProvider` | The provider chosen for this computer, from `data/ai-settings.json` (git-ignored); `mock` if none | none → `mock` or `gemini` |
+| `AiStatus` | What Settings shows: the provider in use, and for each provider whether it is ready and why | none → `{provider, providers: [{name, label, ready, detail}]}` |
+| `SetProvider` | Chooses the provider for this computer; refuses one that is not ready | name → same as `AiStatus` |
+| `TestProvider` | One tiny request to the provider in use, to prove the connection | none → `{provider, ok, message}` |
+
+### `src/website/ai.py`
+
+The Gemini provider being tried (Q11): Gemini through Vertex AI, signed in with the Google login of the computer that runs the app (Q20). Source: `docs/notes/2026-11-15-gemini-provider-chat.md`. It imports `google-genai` only when Gemini is used. One analysis is one HTTPS request: no retries, no follow-up requests. Every failure leaves this file as `AiError` with one sentence for the dashboard.
+
+| Function | Does | In → out |
+|---|---|---|
+| `Status` | Whether Gemini is set up on this computer (package, Google login, project), without calling it | none → `{ready, detail}` |
+| `Login` | Reads the computer's Google login once. Project: `GOOGLE_CLOUD_PROJECT`, else the login's quota project, else gcloud's default | none → credentials, project, where the project came from |
+| `GetClient` | The `google-genai` client, made on first use | none → client |
+| `Forget` | Drops the remembered login and client, so a new `gcloud` login is picked up | none → none |
+| `Settings` | Model and location: `REPTRACKER_MODEL`, `GOOGLE_CLOUD_LOCATION`, else the defaults | none → `{model, location}` |
+| `BuildAnalysisRequest` | A bundle as one request: `system.txt` as the system instruction; one user turn with `context.txt`, then each IMAGES chunk's text and PDF. Refuses a request over `MAX_REQUEST_MB` | folder, manifest → request (plain dict) |
+| `AnalyzeBundle` | Sends one bundle in one call and returns the normalized result | folder, manifest, config, schema → schema-shaped result plus `_details`: `{model, seconds, tokens, notes}` |
+| `Answer` | Sends a keeper's question | prompt text → answer text |
+| `Ping` | One tiny request that proves login, project, location and model | none → a sentence with the time taken in s |
+| `ReadReply` | The reply's text; `AiError` if it was blocked, cut off or empty | response → text |
+| `ParseJson` | The reply as JSON; accepts a Markdown code fence around it | text → object |
+| `NormalizeResult` | Forces a reply into `prompts/response-schema.json`: off-list or missing values become the field's last enum option, `False` or `"none"`; repairs are listed in `notes`. Refuses a reply with none of the schema's fields | reply, schema, image labels, enclosure width in cm → result |
+| `NormalizeMovement` | One position per image sent: matched by timestamp, or by order when there is one entry per image | reply's Movement Data, image labels, width in cm → `[{time, position_cm}]` |
+| `FrameLabels` | Timestamp labels of a bundle's images, in the order sent | manifest → list |
+| `Explain` | Turns an error from the Google libraries into an `AiError` a keeper can act on | exception, time limit in s → `AiError` |
 
 ### `src/website/templates/index.html`
 
@@ -87,6 +114,8 @@ Every function that touches lizard data takes `mode` first: `toy` or `main`, eac
 |---|---|
 | `mode` | The data set on screen: Toy or Main in dev mode, always Main otherwise |
 | `loadMode` | Loads the current mode's media and lizards and redraws everything |
+| `loadAi` | Loads the AI provider status on its own, so a slow check never delays the lizards: at start, when Settings opens, after a test or a refused switch |
+| `renderAi` | The AI provider choice in Settings (dev mode): one radio per provider with Ready / Not ready and why |
 | `setView` | Switches the dashboard between Full and Compact view |
 | `simNow` | The dashboard clock in ms: real time, or the dev-mode clock (speed, set moment, pause) |
 | `syncVideo` | Keeps the camera video at the moment matching the clock; loops like a live feed |
