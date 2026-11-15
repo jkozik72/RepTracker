@@ -15,3 +15,15 @@ experiments/*/data/
 experiments/*/out/
 
 # Language-specific entries: add once tooling is decided (Q2 in docs/open-questions.md)
+
+# Python (src/website is Flask)
+__pycache__/
+*.pyc
+.venv/
+
+# Generated prompt bundles and AI results (regenerate in dev mode)
+src/website/data/*/reptiles/*/prompts/
+src/website/data/*/reptiles/*/analyses.json
+
+# Main-mode data is the keeper's own (uploads, lizards); only toy-mode samples are committed
+src/website/data/main/

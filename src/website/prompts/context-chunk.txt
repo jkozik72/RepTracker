@@ -1,0 +1,19 @@
+CONTEXT for {{name}}
+
+Lizard
+- Name: {{name}}
+- Species: {{species}}
+- Enclosure width: {{enclosure_width_cm}} cm
+- Camera: {{camera_view}} view
+- Hot side: {{hot_side}}; cold side: {{cold_side}}
+
+Time range analysed: {{range_start}} to {{range_end}} ({{range_minutes}} min)
+
+Sensor readings over the range (min / mean / max / latest)
+{{sensor_summary}}
+
+Species reference (research/{{species_file}})
+{{research}}
+
+Previous analysis
+{{previous_analysis}}

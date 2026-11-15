@@ -1,0 +1,12 @@
+{
+  "name": "Joules",
+  "species": "skink",
+  "enclosureWidthCm": 120,
+  "createdAt": "2026-11-13T06:00:00Z",
+  "camera": {"view": "side", "video": "skink-side"},
+  "sensors": {
+    "hotSide": "left",
+    "hot": {"temperature": {"series": "hot-temp-c", "unit": "C"}, "humidity": {"series": "hot-humidity-rh", "unit": "%RH"}},
+    "cold": {"temperature": {"series": "cold-temp-c", "unit": "C"}, "humidity": {"series": "cold-humidity-rh", "unit": "%RH"}}
+  }
+}
