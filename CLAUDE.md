@@ -1,6 +1,6 @@
 # Claude Guide
 
-RepTracker is a motion-tracking project. What it tracks, for whom, and on what input is still being written down (see `docs/open-questions.md`, Q1). This file describes how the repo is organized and how information flows through it. Claude Code reads it every session; people should read it once.
+RepTracker is a dashboard for keeping track of your reptiles. It runs on a single computer as a local website and, from recorded video and sensor files, shows for each lizard a video, a movement graph, statistics, and an AI-produced status with alerts (see `docs/overview.md`). This file describes how the repo is organized and how information flows through it. Claude Code reads it every session; people should read it once.
 
 ## Layout
 
