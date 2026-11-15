@@ -172,6 +172,8 @@ This installation (D8). Update, restart and uninstall only where `src/pi/install
 | `Branches` | The branches on GitHub, main first | → list |
 | `Run` | Starts `reptracker-admin` through `sudo -n` (it runs detached) | action, branch, deleteData → dict |
 
+`app.PhoneLinks` lists the addresses a phone on the network can open (IP addresses first, then `name.local`; none without `--lan`); `/api/phone/qr.svg` draws one of them as a QR code (segno).
+
 `app.ServeLan` serves `--lan`: cheroot over HTTPS, plus a plain-HTTP port that only redirects (`--http-redirect`).
 
 ### `src/pi/`
@@ -225,6 +227,8 @@ The Claude provider (D4): the Claude API through the `anthropic` package, import
 | `renderMovement` / `barChart` / `zoneOf` | The Movement section: time on each side (all, day, night), movement per interval, by hour of day; bar charts; which third a position is in | |
 | `feedingStatus` | Days since the last feeding (dashboard clock) and Fed / Due / Overdue from the profile | animal → status or null |
 | `noteText` | A notification's text with species check labels from the profile | |
+| `loadPhone` / `showPhoneQr` | Settings, Open on your phone: the server's addresses and a QR code for the one picked | |
+| `narrowScreen` | Phones (600px wide or less): charts are drawn 360 wide with fewer labels, so their text stays readable; crossing it redraws | |
 | `loadSystem` / `renderSystem` / `startSystem` | Settings, This installation: branch and commit; update, restart, uninstall, following the task log through the restart | |
 | `toggleExpand` | Opens a lizard from compact to full width, or closes it |
 | `positionScale` | Client-side twin of `PositionScale`: the position chart's unit and maximum |

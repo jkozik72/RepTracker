@@ -90,6 +90,33 @@ class SystemRoutesTest(unittest.TestCase):
         self.assertIn("commit", self.client.get("/api/system").get_json())
 
 
+class PhoneTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
+        for name, value in {"AUTH_FILE": Path(tmp.name) / "auth.json", "DATA": Path(tmp.name)}.items():
+            p = mock.patch.object(auth, name, value); p.start(); self.addCleanup(p.stop)
+        auth._failures.clear()
+        import app as webapp
+        self.webapp = webapp
+        self.client = webapp.app.test_client()
+        self.client.post("/login", data={"username": "ann", "password": "long-enough-1", "confirm": "long-enough-1"})
+        p = mock.patch.object(auth, "LanAddresses", return_value=["100.64.1.2", "192.168.1.20"]); p.start(); self.addCleanup(p.stop)
+
+    def test_no_links_without_lan(self):
+        with mock.patch.dict(self.webapp.app.config, {"LAN_PORT": None}):
+            self.assertEqual(self.client.get("/api/phone").get_json(), {"lan": False, "links": []})
+
+    def test_links_ip_first_and_qr_only_for_them(self):
+        with mock.patch.dict(self.webapp.app.config, {"LAN_PORT": 443}),              mock.patch.object(auth, "HostNames", return_value=["reptracker", "reptracker.local"]):
+            links = self.client.get("/api/phone").get_json()["links"]
+            self.assertEqual([l["url"] for l in links], ["https://192.168.1.20", "https://100.64.1.2", "https://reptracker.local"])
+            self.assertIn("Tailscale", links[1]["label"])
+            r = self.client.get("/api/phone/qr.svg", query_string={"url": "https://192.168.1.20"})
+            self.assertEqual(r.mimetype, "image/svg+xml")
+            self.assertTrue(r.data.startswith(b"<svg"))
+            self.assertEqual(self.client.get("/api/phone/qr.svg", query_string={"url": "https://example.com"}).status_code, 404)
+
+
 class CertificateTest(unittest.TestCase):
     def test_local_name_and_remade_after_a_rename(self):
         from cryptography import x509

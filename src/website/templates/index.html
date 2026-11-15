@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3f7d3a">
 <title>RepTracker</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cg transform='rotate(-18 16 16)'%3E%3Cg fill='none' stroke='%233f7d3a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M13.6 11.2 9.4 9.2 8.4 6.4M18.4 11.2l4.2-2 1-2.8M13.6 18 9.4 20l-1 2.8M18.4 18l4.2 2 1 2.8'/%3E%3Cpath d='M16 20.5c0 5.2 4.6 6.6 6 3.8.9-1.9-.8-3.1-2-2' stroke-width='2.4'/%3E%3C/g%3E%3Cg fill='%233f7d3a'%3E%3Ccircle cx='8.3' cy='6' r='1.3'/%3E%3Ccircle cx='23.7' cy='6' r='1.3'/%3E%3Ccircle cx='8.3' cy='23.2' r='1.3'/%3E%3Ccircle cx='23.7' cy='23.2' r='1.3'/%3E%3Cellipse cx='16' cy='6.8' rx='3.3' ry='3.7'/%3E%3Cellipse cx='16' cy='14.8' rx='3.8' ry='6.3'/%3E%3C/g%3E%3Cg fill='%23e0a02a'%3E%3Ccircle cx='14.7' cy='12.6' r='.9'/%3E%3Ccircle cx='17.3' cy='15' r='.9'/%3E%3Ccircle cx='15' cy='17.6' r='.8'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E">
 <style>
@@ -242,6 +243,9 @@
   .poll-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .poll-row select { width: auto; }
   .check { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; } .check input { margin-top: 4px; }
   .dev-settings { display: grid; gap: 18px; border-top: 1px solid var(--border); padding-top: 16px; }
+  .phone-row { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+  .phone-row img { background: #fff; border-radius: 8px; border: 1px solid var(--border); flex: none; }
+  .phone-row > div { flex: 1; min-width: 200px; }
   .sys-log { font: 12px/1.45 ui-monospace, Consolas, monospace; background: var(--surface-2); border-radius: 8px; padding: 8px 10px; margin: 8px 0 0; max-height: 220px; overflow: auto; white-space: pre-wrap; }
   .sys-uninstall { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-top: 10px; }
   .sys-uninstall summary { cursor: pointer; font-weight: 600; color: var(--bad); }
@@ -265,6 +269,18 @@
   @media (max-width: 760px) {
     .lizard, .add-form, .add-form fieldset, .charts, .lizards { grid-template-columns: minmax(0, 1fr); }
     .ask form, .upload-row { flex-direction: column; align-items: stretch; }
+    /* 16px text in fields, or iPhones zoom the page in when one is tapped */
+    input, select, textarea { font-size: 16px; }
+    .wrap { padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+    .tabs { overflow-x: auto; scrollbar-width: none; }
+    .tab { padding: 10px 12px; }
+  }
+  /* Touch screens and phones: every control at least 40px tall, so it is easy to hit with a finger */
+  @media (pointer: coarse), (max-width: 760px) {
+    .btn, select, .tab, .video-fs, .summary-list a, button.open, button.lizard-name { min-height: 40px; }
+    .video-fs { min-width: 40px; }
+    .summary-list a { display: inline-flex; align-items: center; }
+    summary { padding: 6px 0; }
   }
 </style>
 </head>
@@ -459,6 +475,19 @@
         <p class="hint" id="poll-state">Stopped.</p>
         <p class="hint">At each interval mark of the dashboard clock, every animal on the dashboard is analysed for the interval that just ended, with the AI provider in use. Runs while this page is open, and is stopped whenever the page loads. With the dev clock sped up, intervals (and calls) come faster. A real provider bills every call.</p>
       </div>
+      <div id="phone-settings">
+        <h2>Open on your phone</h2>
+        <div class="phone-row" id="phone-box" hidden>
+          <img id="phone-qr" alt="QR code with RepTracker's address" width="148" height="148">
+          <div>
+            <label for="phone-url" style="margin-top:0">Address</label>
+            <select id="phone-url"></select>
+            <p class="hint">Scan with the phone's camera, on the same Wi-Fi. The browser warns once about the certificate: tap <em>Advanced</em>, then <em>Proceed</em>. Then add it to the home screen from the browser menu.</p>
+          </div>
+        </div>
+        <p class="hint" id="phone-off" hidden>Only this computer can open RepTracker now. Start it with <code>app.py --lan</code> (the Pi installer does) so phones on the same network can reach it.</p>
+      </div>
+
       <div id="system-settings">
         <h2>This installation</h2>
         <p class="hint" id="sys-version" style="margin-top:0">Checking…</p>
@@ -864,9 +893,13 @@ function zoneOf(x, max, hotSide) {
   const third = x / max < 1 / 3 ? "left" : x / max > 2 / 3 ? "right" : "middle";
   return third === "middle" ? "middle" : third === hotSide ? "hot" : "cold";
 }
+// Phones: charts are drawn narrower (so their text stays readable when scaled to the screen) with fewer labels.
+const narrowScreen = window.matchMedia("(max-width: 600px)");
+narrowScreen.addEventListener("change", () => renderLizards());
 function barChart({ bars, unit, height = 150, width = 1040, color = "var(--line)" }) {
+  if (narrowScreen.matches) { width = 360; height = Math.round(height * 1.2); }
   const L = 40, R = 10, T = 8, B = 30, max = Math.max(1, ...bars.map(b => b.value));
-  const bw = (width - L - R) / Math.max(1, bars.length), every = Math.ceil(bars.length / 12);
+  const bw = (width - L - R) / Math.max(1, bars.length), every = Math.ceil(bars.length / (narrowScreen.matches ? 6 : 12));
   let g = "";
   for (let i = 0; i <= 4; i++) { const v = max * i / 4, y = T + (1 - i / 4) * (height - T - B);
     g += `<line x1="${L}" x2="${width - R}" y1="${y}" y2="${y}" stroke="var(--grid)"/><text x="${L - 6}" y="${y + 4}" text-anchor="end">${+v.toFixed(v < 10 ? 1 : 0)}</text>`; }
@@ -1022,6 +1055,7 @@ function replaceLizard(updated) {
 // series: [{name, color, points: [[x, y or null]], dashed?}]; markers: x values to tick along the bottom (e.g. "not visible")
 // guides: dotted horizontal lines [{y, color, title}], e.g. the species profile's range
 function lineChart({ series, xMin, xMax, yMin, yMax, xFmt, yLabel, height = 170, yTicks, width = 520, markers = [], markerTitle = "", guides = [] }) {
+  if (narrowScreen.matches) { width = 360; height = Math.max(height, 190); }
   const W = width, H = height, L = 40, R = 10, T = 8, B = 24;
   if (yMax === yMin) { yMax += 1; yMin -= 1; }
   const sx = x => L + (x - xMin) / (xMax - xMin || 1) * (W - L - R);
@@ -1029,7 +1063,7 @@ function lineChart({ series, xMin, xMax, yMin, yMax, xFmt, yLabel, height = 170,
   let g = "";
   const ticks = yTicks || [0, 1, 2, 3, 4].map(i => yMin + (yMax - yMin) * i / 4);
   for (const v of ticks) g += `<line x1="${L}" x2="${W - R}" y1="${sy(v)}" y2="${sy(v)}" stroke="var(--grid)"/><text x="${L - 6}" y="${sy(v) + 4}" text-anchor="end">${+v.toFixed(1)}</text>`;
-  for (let i = 0; i <= 4; i++) { const x = xMin + (xMax - xMin) * i / 4; g += `<text x="${sx(x)}" y="${H - 6}" text-anchor="${i === 0 ? "start" : i === 4 ? "end" : "middle"}">${esc(xFmt(x))}</text>`; }
+  for (let i = 0; i <= 4; i += narrowScreen.matches ? 2 : 1) { const x = xMin + (xMax - xMin) * i / 4; g += `<text x="${sx(x)}" y="${H - 6}" text-anchor="${i === 0 ? "start" : i === 4 ? "end" : "middle"}">${esc(xFmt(x))}</text>`; }
   for (const gd of guides) g += `<line x1="${L}" x2="${W - R}" y1="${sy(gd.y).toFixed(1)}" y2="${sy(gd.y).toFixed(1)}" stroke="${gd.color}" stroke-width="1.5" stroke-dasharray="2 4" opacity="0.9"><title>${esc(gd.title)}</title></line>`;
   for (const s of series) {
     let d = "", pen = false;
@@ -1537,7 +1571,7 @@ addErr.addEventListener("click", e => {
 const tabs = [...document.querySelectorAll(".tab")];
 function selectTab(tab) {
   tabs.forEach(t => { const on = t === tab; t.setAttribute("aria-selected", on); t.tabIndex = on ? 0 : -1; document.getElementById(t.getAttribute("aria-controls")).hidden = !on; });
-  if (tab.id === "tab-settings") { loadAi(); loadSystem(); }
+  if (tab.id === "tab-settings") { loadAi(); loadSystem(); loadPhone(); }
   if (tab.id === "tab-research") loadProfiles();   // re-check, e.g. after signing in to Google in a terminal
 }
 tabs.forEach(t => {
@@ -1631,6 +1665,21 @@ $("#ai-test").addEventListener("click", async e => {
   await loadAi(); aiMessage(...result);   // a failed test can change the status (an expired sign-in, for example)
   btn.disabled = false; btn.textContent = "Test connection";
 });
+
+/* Settings: open on your phone. The server lists its own network addresses and draws the QR code. */
+async function loadPhone() {
+  let info;
+  try { info = await readResponse(await fetch("/api/phone")); } catch { return; }
+  $("#phone-off").hidden = info.lan && info.links.length > 0;
+  $("#phone-box").hidden = !$("#phone-off").hidden;
+  if (!info.links.length) return;
+  const sel = $("#phone-url"), keep = sel.value;
+  sel.innerHTML = info.links.map(l => `<option value="${esc(l.url)}">${esc(l.label)}</option>`).join("");
+  if (info.links.some(l => l.url === keep)) sel.value = keep;
+  showPhoneQr();
+}
+function showPhoneQr() { $("#phone-qr").src = `/api/phone/qr.svg?url=${encodeURIComponent($("#phone-url").value)}`; }
+$("#phone-url").addEventListener("change", showPhoneQr);
 
 /* Settings: this installation. Update, restart and uninstall only on a Pi installed with src/pi/install.sh (D8). */
 let systemInfo = null, systemBranches = null, systemWatch = null;
