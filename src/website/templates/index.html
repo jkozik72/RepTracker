@@ -436,6 +436,17 @@
 
   <section id="view-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
     <div class="card settings">
+      <div id="ai-settings">
+        <h2>AI provider</h2>
+        <div id="ai-providers" role="radiogroup" aria-label="AI provider"></div>
+        <div class="form-actions" style="justify-content:flex-start;margin-top:10px">
+          <button class="btn" type="button" id="ai-test">Test connection</button>
+          <span class="hint" style="margin:0">Sends one short request to the provider in use. “Ready” only means it is set up on this computer; this proves it works.</span>
+        </div>
+        <p class="error" id="ai-error" hidden></p><p class="ok-msg" id="ai-ok" hidden></p>
+        <p class="hint">One choice for this computer, used for analyses and questions in Toy and Main, with dev mode on or off.</p>
+      </div>
+
       <div>
         <h2>AI polling</h2>
         <div class="poll-row">
@@ -483,22 +494,12 @@
         <div>
           <h2>Data</h2>
           <div class="seg dev" role="group" aria-label="Data mode" id="mode-toggle">
-            <button type="button" data-mode="toy">Toy mode</button>
             <button type="button" data-mode="main">Main mode</button>
+            <button type="button" data-mode="toy">Toy mode</button>
           </div>
-          <p class="hint"><strong>Toy</strong>: sample animals, videos and sensors. <strong>Main</strong>: starts empty; upload media and add your animals. With dev mode off, the dashboard shows Main.</p>
+          <p class="hint"><strong>Main</strong> (the default): your own animals and media. <strong>Toy</strong>: sample animals, videos and sensors. With dev mode off, the dashboard always shows Main.</p>
         </div>
 
-        <div id="ai-settings">
-          <h2>AI provider</h2>
-          <div id="ai-providers" role="radiogroup" aria-label="AI provider"></div>
-          <div class="form-actions" style="justify-content:flex-start;margin-top:10px">
-            <button class="btn" type="button" id="ai-test">Test connection</button>
-            <span class="hint" style="margin:0">Sends one short request to the provider in use. “Ready” only means it is set up on this computer; this proves it works.</span>
-          </div>
-          <p class="error" id="ai-error" hidden></p><p class="ok-msg" id="ai-ok" hidden></p>
-          <p class="hint">One choice for this computer, used for analyses and questions in Toy and Main, with dev mode on or off.</p>
-        </div>
 
         <div>
           <h2>Upload a camera video <span style="text-transform:none;letter-spacing:0" data-mode-name></span></h2>
@@ -530,10 +531,14 @@
 
 <script>
 /* ================= Storage & settings ================= */
-const STORE = { settings: "reptracker.settings.v2", clock: "reptracker.clock" };
+const STORE = { settings: "reptracker.settings.v3", clock: "reptracker.clock" };
+// v3: Main is the default data set. Earlier settings carry over, with the data set reset to Main once.
+try { if (!localStorage.getItem(STORE.settings) && localStorage.getItem("reptracker.settings.v2")) {
+  localStorage.setItem(STORE.settings, JSON.stringify({ ...JSON.parse(localStorage.getItem("reptracker.settings.v2")), mode: "main" }));
+} } catch {}
 function loadStored(key, fallback) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } }
 function saveStored(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} }
-let settings = Object.assign({ devMode: false, mode: "toy", view: "full", pollMinutes: 60, pollImages: "" }, loadStored(STORE.settings, {}));
+let settings = Object.assign({ devMode: false, mode: "main", view: "full", pollMinutes: 60, pollImages: "" }, loadStored(STORE.settings, {}));
 function saveSettings() { saveStored(STORE.settings, settings); }
 // The data set on screen: Toy or Main in dev mode, always Main otherwise.
 const mode = () => settings.devMode ? settings.mode : "main";
