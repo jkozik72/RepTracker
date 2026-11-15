@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#3f7d3a">
+<title>RepTracker · Can't connect</title>
+<style>
+  :root { --bg: #f4f5f0; --surface: #fff; --border: #dcdfd4; --text: #1d221b; --muted: #61695c; --accent: #3f7d3a; --accent-ink: #fff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121510; --surface: #1a1e18; --border: #30362d; --text: #e7eae3; --muted: #9aa294; --accent: #7cc173; --accent-ink: #0f1a0d; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width: min(380px, 100%); display: grid; gap: 12px; text-align: center; }
+  img { width: 72px; height: 72px; margin: 0 auto; border-radius: 16px; }
+  h1 { font-size: 18px; margin: 0; }
+  p { margin: 0; color: var(--muted); }
+  button { font: inherit; font-weight: 600; min-height: 44px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+</style>
+</head>
+<body>
+<main class="card">
+  <img src="/static/icons/icon-192.png" alt="">
+  <h1>Can't reach RepTracker</h1>
+  <p>RepTracker only works on your home network. Check that this phone is on the same Wi-Fi as the Pi, and that the Pi is on.</p>
+  <button type="button" onclick="location.reload()">Try again</button>
+</main>
+</body>
+</html>
