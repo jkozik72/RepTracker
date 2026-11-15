@@ -79,15 +79,19 @@ Every function that touches lizard data takes `mode` first: `toy` or `main`, eac
 | `ParsePDF` | Images into one PDF, one page each, labelled with its timestamp | images, labels, path → PDF file |
 | `PositionScale` | Prompt values for the position unit: cm from the left wall, or % of the image width when no enclosure width is set | config → `{enclosure_width, position_unit, position_max}` |
 | `FillTemplate` | Fills `{{key}}` in a file from `prompts/` | file name, values → text |
-| `GeneratePrompts` | Builds the lizard's prompt chunk for a range: context + one IMAGES chunk per 60 images (1/min); writes a bundle with `manifest.json` | mode, id, start, end (ISO) → manifest |
+| `GeneratePrompts` | Builds the lizard's prompt chunk for a range: context + one IMAGES chunk per 60 images (1/min); writes a bundle with `manifest.json`. Never sends a video moment twice: a range longer than the video is cut to its last part that fits in one pass | mode, id, start, end (ISO) → manifest |
 | `SendPrompt` | Sends a bundle to the provider in use and appends the answer to `analyses.json`. Saves nothing if the provider fails | mode, id, bundle id → analysis entry: `{bundleId, provider, range, sentAt, result}`, plus `model`, `seconds`, `tokens`, `notes` when the provider gives them |
 | `MockProvider` | Offline stand-in for the AI (Q11): position from the darkest pixels of each frame, every other field "can't see" | bundle → schema-shaped result |
-| `GeminiProvider` | The real provider being tried (Q11): hands the bundle to `ai.AnalyzeBundle` | bundle → schema-shaped result with `_details` |
-| `AskQuestion` | Answers a keeper's question from `prompts/ask.txt` with the provider in use | mode, id, question, now → `{answer, prompt, provider}` |
-| `CurrentProvider` | The provider chosen for this computer, from `data/ai-settings.json` (git-ignored); `mock` if none | none → `mock` or `gemini` |
-| `AiStatus` | What Settings shows: the provider in use, and for each provider whether it is ready and why | none → `{provider, providers: [{name, label, ready, detail}]}` |
+| `ClaudeProvider` | The project's provider (D4): hands the bundle to `claude_ai.AnalyzeBundle` | bundle → schema-shaped result with `_details` |
+| `GeminiProvider` | The Gemini provider, still selectable: hands the bundle to `ai.AnalyzeBundle` | bundle → schema-shaped result with `_details` |
+| `AskQuestion` | Answers a keeper's question from `prompts/ask.txt` with the provider in use; with vision, sends the current camera picture too | mode, id, question, now, vision → `{answer, prompt, provider}`, plus `image` (a `data:` URL) with vision |
+| `CurrentPicture` | The camera picture at a moment, as JPEG bytes (at most 1280 px wide), for a question with vision | mode, config, datetime → bytes |
+| `CurrentProvider` | The provider chosen for this computer, from `data/ai-settings.json` (git-ignored); `mock` if none | none → `mock`, `claude` or `gemini` |
+| `AiStatus` | What Settings shows: the provider in use, and for each provider whether it is ready and why | none → `{provider, providers: [{name, label, ready, detail}]}`; Claude's entry adds `apiKey: {saved, mask}`, never the key |
 | `SetProvider` | Chooses the provider for this computer; refuses one that is not ready | name → same as `AiStatus` |
-| `TestProvider` | One tiny request to the provider in use, to prove the connection | none → `{provider, ok, message}` |
+| `TestProvider` | One tiny request to the provider in use (`PINGS`), to prove the connection | none → `{provider, ok, message}` |
+| `SaveClaudeKey` | Saves the Anthropic API key on this computer through `claude_ai.SaveKey` | key → same as `AiStatus` |
+| `RemoveClaudeKey` | Deletes the saved key; switches back to the Mock if Claude was in use and is no longer ready | none → same as `AiStatus` |
 
 ### `src/website/ai.py`
 
@@ -102,7 +106,7 @@ The Gemini provider being tried (Q11): Gemini through Vertex AI, signed in with 
 | `Settings` | Model and location: `REPTRACKER_MODEL`, `GOOGLE_CLOUD_LOCATION`, else the defaults | none → `{model, location}` |
 | `BuildAnalysisRequest` | A bundle as one request: `system.txt` as the system instruction; one user turn with `context.txt`, then each IMAGES chunk's text and PDF. Refuses a request over `MAX_REQUEST_MB` | folder, manifest → request (plain dict) |
 | `AnalyzeBundle` | Sends one bundle in one call and returns the normalized result | folder, manifest, config, schema → schema-shaped result plus `_details`: `{model, seconds, tokens, notes}` |
-| `Answer` | Sends a keeper's question | prompt text → answer text |
+| `Answer` | Sends a keeper's question, with the camera picture first when vision is on | prompt text, JPEG bytes or None → answer text |
 | `Ping` | One tiny request that proves login, project, location and model | none → a sentence with the time taken in s |
 | `ReadReply` | The reply's text; `AiError` if it was blocked, cut off or empty | response → text |
 | `ParseJson` | The reply as JSON; accepts a Markdown code fence around it | text → object |
@@ -110,6 +114,26 @@ The Gemini provider being tried (Q11): Gemini through Vertex AI, signed in with 
 | `NormalizeMovement` | One position per image sent: matched by timestamp, or by order when there is one entry per image | reply's Movement Data, image labels, maximum position (enclosure width in cm, or 100 for % of the image) → `[{time, position}]`; also reads the older `position_cm` key |
 | `FrameLabels` | Timestamp labels of a bundle's images, in the order sent | manifest → list |
 | `Explain` | Turns an error from the Google libraries into an `AiError` a keeper can act on | exception, time limit in s → `AiError` |
+
+### `src/website/claude_ai.py`
+
+The Claude provider (D4): the Claude API through the `anthropic` package, imported only when Claude is used. Source: `docs/notes/2026-11-15-claude-provider-chat.md`. Reuses `ParseJson`, `NormalizeResult` and `FrameLabels` from `ai.py`. One analysis is one request (`max_retries=0`); refusals go to Anthropic's server-side fallback (`fallbacks: "default"`). Every failure leaves this file as `AiError` with one sentence for the dashboard.
+
+| Function | Does | In → out |
+|---|---|---|
+| `ApiKey` | The key to use: the one saved in Settings, else `ANTHROPIC_API_KEY` | none → (key, where it came from) |
+| `SaveKey` | Checks the key looks like an Anthropic key (`sk-ant-…`) and writes `data/claude-key.json` (git-ignored) | key → none |
+| `RemoveKey` | Deletes the saved key | none → none |
+| `MaskKey` | First 7 and last 4 characters, for showing on screen | key → text |
+| `Status` | Whether Claude is set up (package, key), without calling it | none → `{ready, detail, keySaved, keyMask}` |
+| `GetClient` | The `anthropic` client for the current key, made on first use | none → client |
+| `StructuredSchema` | `response-schema.json` in the form structured outputs accept: drops `$schema` and `title`, writes a list of types as `anyOf` | schema → schema |
+| `BuildAnalysisRequest` | A bundle as one request: `system.txt` as the system prompt; one user turn with each chunk's PDF then text; reply constrained to the schema. Refuses over 30 MB or 600 PDF pages | folder, manifest, schema → keyword arguments for `beta.messages.create` |
+| `AnalyzeBundle` | Sends one bundle in one call and returns the normalized result | folder, manifest, config, schema → schema-shaped result plus `_details`: `{model, seconds, tokens, notes}` |
+| `Answer` | Sends a keeper's question (effort `low`), with the camera picture first when vision is on | prompt text, JPEG bytes or None → answer text |
+| `Ping` | One tiny request that proves the key and model | none → a sentence with the time taken in s |
+| `ReadReply` | The reply's text; `AiError` if refused, cut off or empty | response → text |
+| `Explain` | Turns an `anthropic` error into an `AiError` a keeper can act on | exception, time limit in s → `AiError` |
 
 ### `src/website/templates/index.html`
 
@@ -120,11 +144,15 @@ The Gemini provider being tried (Q11): Gemini through Vertex AI, signed in with 
 | `toggleExpand` | Opens a lizard from compact to full width, or closes it |
 | `positionScale` | Client-side twin of `PositionScale`: the position chart's unit and maximum |
 | `loadAi` | Loads the AI provider status on its own, so a slow check never delays the lizards: at start, when Settings opens, after a test or a refused switch |
+| `renderApiKey` | The Anthropic API key form under Claude in Settings: save, show/hide, remove; shows only the masked key |
 | `renderAi` | The AI provider choice in Settings (dev mode): one radio per provider with Ready / Not ready and why |
 | `simNow` | The dashboard clock in ms: real time, or the dev-mode clock (speed, set moment, pause) |
 | `syncVideo` | Keeps the camera video at the moment matching the clock; loops like a live feed |
 | `readSeries` | Client-side twin of `ReadSensor` |
 | `renderSensorCharts` | Temperature and humidity graphs, window growing to 5 days then sliding |
-| `renderPositionChart` | Position (cm from the left wall) from the latest analysis' Movement Data |
+| `renderPositionChart` | Position (cm from the left wall, or %) from the latest analysis' Movement Data, times in local time |
+| `labelToLocal` | An image label ("2026-11-14 10:54 UTC") as a local time |
+| `hourlyTick` | Hourly AI call: at each hour mark of the dashboard clock, starts `runHourly` for each lizard that has no call in flight |
+| `runHourly` | Generates and sends the prompts for the hour that just ended, updates the lizard, and reports in the status line under the summary |
 | `uploadWithProgress` | Uploads a file with a progress callback (XMLHttpRequest, since fetch can't report upload progress) |
 | `showBundle` | The dev-mode prompt inspector: system prompt, schema, context chunk, each IMAGES chunk with its PDF and frames |

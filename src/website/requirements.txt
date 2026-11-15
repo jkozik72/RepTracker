@@ -2,3 +2,4 @@ flask>=3.1
 pillow>=11
 imageio-ffmpeg>=0.6
 google-genai>=3.3
+anthropic>=2.8

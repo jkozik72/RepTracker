@@ -38,3 +38,11 @@ Entry format:
 - **Consequences:** Inputs are files, not streams. Video is preprocessed: raw video in, processed video and statistics out, and the backend polls those. No hardware integration. We give up showing the system on live hardware: "real time" on the dashboard is a playback of recorded data. How the playback maps onto time is open (Q17).
 - **Sources:** `docs/notes/2026-11-14-project-brief.md` § Inputs (s. 22–29); `docs/notes/2026-11-14-whiteboard-system-design.md` § Design decisions.
 - **Replaces:** none
+
+## D4 (2026-11-15): Use the Claude API as the AI provider
+- **Context:** The dashboard sends each lizard's prompt chunk (PDFs of camera images plus a context chunk) to an AI and asks questions about it. Q11 left the provider open; Gemini through Vertex AI was being tried.
+- **Options:** A: Gemini through Vertex AI (Google Cloud login, no key). B: the Claude API (Anthropic API key). C: keep only the offline Mock.
+- **Chose:** B, the team's choice ("Now we are using claude API"). Default model `claude-opus-5-5`; replies are constrained to `prompts/response-schema.json` with structured outputs.
+- **Consequences:** The API key is entered in Settings (dev mode) and kept on the computer that runs the app (`src/website/data/claude-key.json`, git-ignored), or read from `ANTHROPIC_API_KEY`. Gemini and the Mock stay selectable in Settings; the Mock remains the default until a key is saved and Claude is selected. Requests cost money per call.
+- **Sources:** `docs/notes/2026-11-15-claude-provider-chat.md`
+- **Replaces:** none

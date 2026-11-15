@@ -104,7 +104,9 @@
   .stat.hot dt::before { background: var(--hot); } .stat.cold dt::before { background: var(--cold); }
   .panel { background: var(--surface-2); border-radius: 10px; padding: 12px 14px; min-width: 0; }
   .analysis p { margin: 0 0 6px; } .analysis ul { margin: 4px 0 0; padding-left: 18px; }
-  .ask form { display: flex; gap: 8px; }
+  .ask form { display: flex; gap: 8px; flex-wrap: wrap; } .ask form input[name="q"] { flex: 1 1 200px; width: auto; }
+  .ask .vision { flex-basis: 100%; display: flex; gap: 6px; align-items: center; font-weight: 500; font-size: 13px; margin: 0; color: var(--muted); }
+  .asked-picture { display: block; max-width: 220px; border-radius: 6px; margin: 4px 0; }
   .chat { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; max-height: 220px; overflow-y: auto; font-size: 14px; }
   .chat .q { font-weight: 600; } .chat .a { color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
   .chat .a.err { color: var(--bad); font-weight: 600; }
@@ -167,6 +169,8 @@
   progress { width: 100%; height: 8px; margin-top: 6px; accent-color: var(--accent); }
   .ok-msg { color: var(--ok); font-size: 13px; font-weight: 600; margin: 6px 0 0; }
   .provider { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; margin-top: 8px; } .provider input { margin-top: 4px; }
+  .api-key { margin: 8px 0 4px 26px; padding: 10px 12px; background: var(--surface-2); border-radius: 8px; }
+  .api-key .key-row { display: flex; gap: 6px; flex-wrap: wrap; } .api-key .key-row input { flex: 1 1 220px; width: auto; }
   .provider .state { font-size: 12px; font-weight: 600; margin-left: 6px; } .provider .state.ok { color: var(--ok); } .provider .state.bad { color: var(--bad); }
 
   @media (max-width: 760px) {
@@ -227,6 +231,7 @@
     </div>
 
     <div class="card summary" id="summary" aria-live="polite"></div>
+    <p class="hint" id="hourly-status" hidden style="margin:-12px 0 16px"></p>
     <p class="error" id="load-error" hidden></p>
     <div class="lizards" id="lizards"></div>
 
@@ -316,6 +321,9 @@
 
   <section id="view-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
     <div class="card settings">
+      <label class="check"><input type="checkbox" id="hourly-ai">
+        <span><strong>Hourly AI call</strong><br><span class="hint" style="margin:0">At the start of every hour, each lizard on the dashboard is analysed for the hour that just ended, with the AI provider in use. Runs while this page is open; with the dev clock sped up, hours (and calls) come faster. A real provider bills every call.</span></span>
+      </label>
       <label class="check"><input type="checkbox" id="dev-mode">
         <span><strong>Dev mode</strong><br><span class="hint" style="margin:0">Clock controls above the alerts (speed, set time, pause, resume), a prompt inspector on each lizard, Toy / Main data, and uploads.</span></span>
       </label>
@@ -374,7 +382,7 @@
 const STORE = { settings: "reptracker.settings.v2", clock: "reptracker.clock" };
 function loadStored(key, fallback) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } }
 function saveStored(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} }
-let settings = Object.assign({ devMode: false, mode: "toy", view: "full" }, loadStored(STORE.settings, {}));
+let settings = Object.assign({ devMode: false, mode: "toy", view: "full", hourlyAi: false }, loadStored(STORE.settings, {}));
 function saveSettings() { saveStored(STORE.settings, settings); }
 // The data set on screen: Toy or Main in dev mode, always Main otherwise.
 const mode = () => settings.devMode ? settings.mode : "main";
@@ -565,6 +573,7 @@ function renderLizard(l) {
       <form data-action="ask">
         <input name="q" placeholder="e.g. Is ${esc(c.name)} warm enough?" autocomplete="off" required>
         <button class="btn primary" type="submit">Ask</button>
+        <label class="vision"><input type="checkbox" name="vision"> Use vision: send the current camera picture with the question</label>
       </form>
     </div>
     <div class="panel full">
@@ -665,6 +674,12 @@ async function renderSensorCharts(card, l, now) {
   winEl.textContent = `Window: ${h < 48 ? h.toFixed(1) + " h" : (h / 24).toFixed(1) + " days"} (grows to 5 days, then slides).`;
 }
 
+// Image labels are "2026-11-14 10:54 UTC"; show them in the viewer's time like the rest of the page.
+function labelToLocal(label) {
+  const m = /^(\d{4}-\d\d-\d\d) (\d\d:\d\d)/.exec(label || "");
+  if (!m) return label || "";
+  return new Date(`${m[1]}T${m[2]}:00Z`).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
 // Position unit: cm from the left wall when the enclosure width is set, else % of the video's width.
 function positionScale(c) {
   return c.enclosureWidthCm ? { max: c.enclosureWidthCm, unit: "cm from the left wall", short: "cm" }
@@ -680,9 +695,9 @@ function renderPositionChart(l) {
     series: [{ name: "position", color: "var(--line)", points: md.map((m, i) => [i, m.position ?? m.position_cm]) }],
     xMin: 0, xMax: Math.max(1, md.length - 1), yMin: 0, yMax: W, width: 1040, height: 190,
     yTicks: [0, W / 4, W / 2, 3 * W / 4, W],
-    xFmt: i => (md[Math.round(i)] || {}).time?.replace(/^\d{4}-\d\d-\d\d /, "").replace(" UTC", "") || "",
+    xFmt: i => labelToLocal((md[Math.round(i)] || {}).time),
     yLabel: `Position, ${ps.unit}`
-  }) + `<p class="hint" style="margin:2px 0 0">${ps.unit} (0 = left, ${W} = right; hot side ${esc(l.config.sensors.hotSide)}) · one point per image, UTC${seen < md.length ? ` · position given for ${seen} of ${md.length} images; gaps are images without one` : ""}</p>`;
+  }) + `<p class="hint" style="margin:2px 0 0">${ps.unit} (0 = left, ${W} = right; hot side ${esc(l.config.sensors.hotSide)}) · one point per image, local time${seen < md.length ? ` · position given for ${seen} of ${md.length} images; gaps are images without one` : ""}</p>`;
 }
 
 /* ================= Real-time loop: camera + sensors ================= */
@@ -821,12 +836,15 @@ $("#lizards").addEventListener("submit", async e => {
   const form = e.target, card = form.closest(".lizard"), id = card.dataset.id;
   if (form.matches("[data-action='ask']")) {
     const q = form.q.value.trim(); if (!q) return;
+    const vision = form.vision.checked;
     const chat = card.querySelector("[data-chat]"), li = document.createElement("li");
-    li.innerHTML = `<div class="q">${esc(q)}</div><div class="a">${realAi() ? "Asking the AI…" : "…"}</div>`;
+    li.innerHTML = `<div class="q">${esc(q)}${vision ? ' <span class="pill none">with picture</span>' : ""}</div><div class="a">${realAi() ? "Asking the AI…" : "…"}</div>`;
     chat.appendChild(li); form.q.value = "";
     try {
-      const res = await api("POST", `/lizards/${id}/ask`, { question: q, now: new Date(simNow()).toISOString() });
-      li.innerHTML = `<div class="q">${esc(q)}</div><div class="a">${esc(res.answer)}</div><details><summary>Prompt sent to ${esc(res.provider)}</summary><pre>${esc(res.prompt)}</pre></details>`;
+      const res = await api("POST", `/lizards/${id}/ask`, { question: q, now: new Date(simNow()).toISOString(), vision });
+      li.innerHTML = `<div class="q">${esc(q)}${res.image ? ' <span class="pill none">with picture</span>' : ""}</div>
+        ${res.image ? `<img class="asked-picture" src="${res.image}" alt="Camera picture sent with the question">` : ""}
+        <div class="a">${esc(res.answer)}</div><details><summary>Prompt sent to ${esc(res.provider)}</summary><pre>${esc(res.prompt)}</pre></details>`;
     } catch (x) { const a = li.querySelector(".a"); a.textContent = x.message; a.classList.add("err"); }
     chat.scrollTop = chat.scrollHeight;
   }
@@ -920,9 +938,46 @@ function renderAi() {
   $("#ai-providers").innerHTML = ai.providers.map(p => `
     <label class="provider"><input type="radio" name="ai-provider" value="${esc(p.name)}" ${p.name === ai.provider ? "checked" : ""}>
       <span><strong>${esc(p.label)}</strong><span class="state ${p.ready ? "ok" : "bad"}">${p.ready ? "Ready" : "Not ready"}</span><br>
-        <span class="hint" style="margin:0">${esc(p.detail)}</span></span></label>`).join("");
+        <span class="hint" style="margin:0">${esc(p.detail)}</span></span></label>
+    ${p.apiKey ? renderApiKey(p) : ""}`).join("");
   document.querySelectorAll("[data-action='send']").forEach(b => { if (!b.disabled) b.textContent = sendLabel(); });
 }
+// The Anthropic API key form under Claude. The server keeps the key and only ever sends back a masked version.
+function renderApiKey(p) {
+  const k = p.apiKey;
+  return `<form class="api-key" data-api-key="${esc(p.name)}" autocomplete="off">
+      <label for="api-key-${esc(p.name)}">Anthropic API key${k.saved ? ` <span class="hint" style="margin:0;font-weight:400">· saved: ${esc(k.mask)}</span>` : ""}</label>
+      <div class="key-row">
+        <input id="api-key-${esc(p.name)}" name="key" type="password" spellcheck="false" placeholder="${k.saved ? "Paste a new key to replace it" : "sk-ant-…"}" autocomplete="off">
+        <button class="btn" type="button" data-key-toggle aria-pressed="false">Show</button>
+        <button class="btn primary" type="submit">Save key</button>
+        ${k.saved ? `<button class="btn" type="button" data-key-remove>Remove</button>` : ""}
+      </div>
+      <p class="hint">Kept only on the computer running app.py (data/claude-key.json, git-ignored) and never shown here again. Get one in the Claude Console, under API keys.</p>
+    </form>`;
+}
+$("#ai-providers").addEventListener("submit", async e => {
+  const form = e.target.closest("[data-api-key]"); if (!form) return;
+  e.preventDefault();
+  const key = form.key.value.trim();
+  if (!key) { aiMessage("error", "Paste an API key first."); return; }
+  aiMessage();
+  try { ai = await aiApi("POST", "/claude-key", { key }); renderAi(); aiMessage("ok", "API key saved. Select Claude, then use Test connection to check it."); }
+  catch (x) { aiMessage("error", x.message); }
+});
+$("#ai-providers").addEventListener("click", async e => {
+  const toggle = e.target.closest("[data-key-toggle]");
+  if (toggle) {
+    const input = toggle.closest("form").key, show = input.type === "password";
+    input.type = show ? "text" : "password"; toggle.textContent = show ? "Hide" : "Show"; toggle.setAttribute("aria-pressed", show);
+    return;
+  }
+  if (!e.target.closest("[data-key-remove]")) return;
+  if (!confirm("Remove the saved Anthropic API key from this computer?")) return;
+  aiMessage();
+  try { ai = await aiApi("DELETE", "/claude-key"); renderAi(); aiMessage("ok", "API key removed."); }
+  catch (x) { aiMessage("error", x.message); }
+});
 function aiMessage(kind, text) {
   $("#ai-error").hidden = $("#ai-ok").hidden = true;
   if (text) { const el = $(kind === "ok" ? "#ai-ok" : "#ai-error"); el.textContent = text; el.hidden = false; }
@@ -948,6 +1003,7 @@ $("#ai-test").addEventListener("click", async e => {
 
 /* Settings: dev mode, toy/main, uploads (all apply immediately) */
 function renderSettings() {
+  $("#hourly-ai").checked = settings.hourlyAi;
   $("#dev-mode").checked = settings.devMode;
   $("#dev-settings").hidden = !settings.devMode;
   document.querySelectorAll("#mode-toggle button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === settings.mode));
@@ -959,6 +1015,49 @@ function renderSettings() {
       : `<li style="background:none;padding:0;font-family:inherit" class="hint">None yet</li>`;
   }
 }
+/* Hourly AI call: at each hour mark of the dashboard clock, analyse the hour that just ended for every lizard.
+   Each lizard has at most one call in flight; if hours pass while it is busy (a fast dev clock), only the
+   latest finished hour is analysed, never a backlog. Turning it on or reloading waits for the next hour mark. */
+const hourly = { last: {}, busy: new Set() };
+function hourlyStatus(text, isError) {
+  const el = $("#hourly-status");
+  el.hidden = !settings.hourlyAi;
+  if (text != null) { el.textContent = text; el.style.color = isError ? "var(--bad)" : ""; }
+}
+function hourlyTick() {
+  if (!settings.hourlyAi) return;
+  const hour = Math.floor(simNow() / HOUR);
+  for (const l of lizards) {
+    const key = `${mode()}/${l.id}`;
+    if (hourly.last[key] === undefined || hour < hourly.last[key]) { hourly.last[key] = hour; continue; }
+    if (hour > hourly.last[key] && !hourly.busy.has(key)) { hourly.last[key] = hour; runHourly(l, hour, key); }
+  }
+}
+async function runHourly(l, hour, key) {
+  const end = hour * HOUR, start = end - HOUR;
+  if (end <= Date.parse(l.config.createdAt)) return;          // camera not started yet
+  const span = `${fmtShort(start)}–${new Date(end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+  const runMode = mode();
+  hourly.busy.add(key);
+  hourlyStatus(`Hourly AI: analysing ${l.config.name}, ${span}…`);
+  try {
+    const m = await api("POST", `/lizards/${l.id}/prompts`, { start: new Date(start).toISOString(), end: new Date(end).toISOString() });
+    const entry = await api("POST", `/lizards/${l.id}/prompts/${m.bundleId}/send`);
+    const current = mode() === runMode && lizards.find(x => x.id === l.id);
+    if (current) replaceLizard({ ...current, latest: entry });
+    hourlyStatus(`Hourly AI: ${l.config.name} analysed for ${span} (${entry.provider}). Next at ${new Date(end + HOUR).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`);
+  } catch (x) {
+    hourlyStatus(`Hourly AI: ${l.config.name}, ${span} failed: ${x.message}`, true);
+  } finally { hourly.busy.delete(key); }
+}
+setInterval(hourlyTick, 1000);
+$("#hourly-ai").addEventListener("change", e => {
+  settings.hourlyAi = e.target.checked; saveSettings();
+  hourly.last = {};
+  const next = new Date((Math.floor(simNow() / HOUR) + 1) * HOUR).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  hourlyStatus(settings.hourlyAi ? `Hourly AI is on. First analysis at ${next} (dashboard clock).` : "");
+});
+
 $("#dev-mode").addEventListener("change", e => {
   settings.devMode = e.target.checked; saveSettings();
   if (settings.devMode) setClock(realClock());
@@ -1029,7 +1128,10 @@ async function loadMode() {
     $("#load-error").hidden = false;
   }
   expanded.clear();
+  hourly.last = {};     // new set of lizards: wait for the next hour mark
   renderDevBar(); renderSettings(); renderLizards();
+  if (settings.hourlyAi && $("#hourly-status").hidden)
+    hourlyStatus(`Hourly AI is on. Next analysis at ${new Date((Math.floor(simNow() / HOUR) + 1) * HOUR).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} (dashboard clock).`);
 }
 loadMode();
 loadAi();

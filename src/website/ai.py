@@ -459,9 +459,15 @@ def AnalyzeBundle(folder, manifest, config, schema):
     return result
 
 
-def Answer(prompt):
-    """Send a keeper's question (already filled into prompts/ask.txt) to Gemini; returns the answer as text."""
-    request = {"model": Settings()["model"], "contents": prompt, "config": _Options(QUICK_TIMEOUT_S)}
+def Answer(prompt, image=None):
+    """Send a keeper's question (already filled into prompts/ask.txt) to Gemini; returns the answer as text.
+
+    image: JPEG bytes of the current camera picture (vision), sent before the question.
+    """
+    contents = prompt
+    if image:
+        contents = [{"role": "user", "parts": [{"inline_data": {"mime_type": "image/jpeg", "data": image}}, {"text": prompt}]}]
+    request = {"model": Settings()["model"], "contents": contents, "config": _Options(QUICK_TIMEOUT_S)}
     response, _ = _Call(request)
     return ReadReply(response)[:MAX_ANSWER_CHARS]
 

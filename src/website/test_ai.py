@@ -732,7 +732,8 @@ class MainTest(unittest.TestCase):
             status = self.main.SetProvider("gemini")
             self.assertEqual(status["provider"], "gemini")
             self.assertEqual(self.main.CurrentProvider(), "gemini")
-            self.assertEqual([p["ready"] for p in status["providers"]], [True, True])
+            ready = {p["name"]: p["ready"] for p in status["providers"]}
+            self.assertTrue(ready["mock"] and ready["gemini"])
             with self.assertRaises(self.main.RepTrackerError):
                 self.main.SetProvider("chatgpt")
             self.assertEqual(self.main.SetProvider("mock")["provider"], "mock")

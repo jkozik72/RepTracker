@@ -93,6 +93,17 @@ def set_ai_provider():
     return jsonify(main.SetProvider(body.get("provider")))
 
 
+@app.post("/api/ai/claude-key")
+def save_claude_key():
+    body = request.get_json(force=True) or {}
+    return jsonify(main.SaveClaudeKey(body.get("key")))
+
+
+@app.delete("/api/ai/claude-key")
+def remove_claude_key():
+    return jsonify(main.RemoveClaudeKey())
+
+
 @app.post("/api/ai/test")
 def test_ai_provider():
     return jsonify(main.TestProvider())
@@ -120,7 +131,7 @@ def send_prompts(mode, lizard_id, bundle_id):
 @app.post("/api/<mode>/lizards/<lizard_id>/ask")
 def ask(mode, lizard_id):
     body = request.get_json(force=True) or {}
-    return jsonify(main.AskQuestion(mode, lizard_id, body.get("question"), body.get("now")))
+    return jsonify(main.AskQuestion(mode, lizard_id, body.get("question"), body.get("now"), bool(body.get("vision"))))
 
 
 if __name__ == "__main__":

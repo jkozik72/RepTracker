@@ -10,6 +10,7 @@ Two separate data sets, each under data/<mode>/:
 
 Times are ISO 8601 strings in UTC ("2026-11-14T10:00:00Z").
 """
+import base64
 import bisect
 import io
 import json
@@ -26,6 +27,7 @@ import imageio_ffmpeg
 from PIL import Image, ImageDraw
 
 import ai
+import claude_ai
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -419,8 +421,9 @@ def LabelTime(t):
 def GeneratePrompts(mode, lizardId, startIso, endIso):
     """Build every prompt for one lizard over a time range and write them to a bundle folder.
 
-    One image per minute from the start. Ranges under 60 min give one shorter IMAGES chunk;
-    a video shorter than the range loops, like the live camera.
+    One image per minute from the start. Ranges under 60 min give one shorter IMAGES chunk.
+    No video moment is sent twice: when the range is longer than the video (the live camera
+    loops), only the last part of the range that fits in one pass of the video is analysed.
     """
     config = LoadConfig(mode, lizardId)
     start, end = ParseTime(startIso), ParseTime(endIso)
@@ -434,9 +437,17 @@ def GeneratePrompts(mode, lizardId, startIso, endIso):
     if minutes > MAX_RANGE_MIN:
         raise RepTrackerError(f"Ranges are limited to {MAX_RANGE_MIN // 60} h ({MAX_RANGE_MIN} images).")
 
-    imageTimes = [start + timedelta(minutes=i) for i in range(max(1, math.ceil(minutes)))]
     video = config["camera"]["video"]
     duration = VideoDurationSeconds(mode, video)
+    # Images are 1 min apart, so at most duration/60 of them before the looping video repeats itself.
+    requestedMinutes, maxImages = minutes, max(1, int(duration // 60))
+    count = max(1, math.ceil(minutes))
+    trimmed = count > maxImages
+    if trimmed:
+        count = maxImages
+        start = end - timedelta(minutes=count)
+        minutes = count
+    imageTimes = [start + timedelta(minutes=i) for i in range(count)]
     hotSide = config["sensors"]["hotSide"]
     common = {
         "name": config["name"], "species": config["species"],
@@ -488,10 +499,12 @@ def GeneratePrompts(mode, lizardId, startIso, endIso):
         chunks.append({"type": "images", "text": text, "pdf": pdf, "frames": frames})
 
     notes = []
-    if minutes < 60:
+    if trimmed:
+        notes.append(f"Video '{video}' is {duration / 60:.1f} min, shorter than the {requestedMinutes:.0f}-min range, and it loops. "
+                     f"So no moment is sent twice, only the last {count} min ({LabelTime(start)} to {LabelTime(end)}) "
+                     f"were analysed: {count} image(s).")
+    elif minutes < 60:
         notes.append(f"Range is {minutes:.0f} min (< 60): one IMAGES chunk with {len(imageTimes)} image(s).")
-    if minutes * 60 > duration:
-        notes.append(f"Video '{video}' is {duration / 60:.1f} min, shorter than the range; it loops.")
     manifest = {
         "mode": mode, "lizardId": lizardId, "bundleId": bundleId,
         "range": {"start": FormatTime(start), "end": FormatTime(end)},
@@ -516,9 +529,11 @@ def LoadBundle(mode, lizardId, bundleId):
 # A provider is two functions with fixed signatures, registered under one name:
 #   PROVIDERS[name](folder, manifest, config) -> a dict shaped like prompts/response-schema.json,
 #                                                 plus an optional "_details" dict (see DETAIL_KEYS)
-#   ASKERS[name](prompt, latest, sensorsNow)  -> the answer to a keeper's question, as text
-# "mock" runs offline so the whole loop can be tested without an AI. "gemini" is the real one
-# (ai.py). The provider in use is chosen in Settings (dev mode) and saved in data/ai-settings.json.
+#   ASKERS[name](prompt, latest, sensorsNow, image=None) -> the answer to a keeper's question, as text;
+#                                                 image is JPEG bytes of the camera now, when vision is on
+# "mock" runs offline so the whole loop can be tested without an AI. "claude" (claude_ai.py, needs an
+# Anthropic API key) and "gemini" (ai.py, needs a Google Cloud login) are the real ones. The provider
+# in use is chosen in Settings (dev mode) and saved in data/ai-settings.json.
 
 def _MockPosition(img, scale):
     """Mock-only stand-in for the AI: x of the dark pixels (the sample lizard is the darkest thing)."""
@@ -558,8 +573,8 @@ def MockProvider(folder, manifest, config):
     }
 
 
-def MockAnswer(prompt, latest, sensorsNow):
-    return ("[Mock provider, not a real AI] I can't reason about the question, but here is what I would use: "
+def MockAnswer(prompt, latest, sensorsNow, image=None):
+    return (("[The Mock can't see pictures; the one attached was ignored.] " if image else "") +"[Mock provider, not a real AI] I can't reason about the question, but here is what I would use: "
             + (latest["result"]["Analysis"] if latest else "there is no analysis yet.")
             + " Current readings: " + sensorsNow.replace("\n", "; "))
 
@@ -577,14 +592,25 @@ def GeminiProvider(folder, manifest, config):
     return _CallAi(ai.AnalyzeBundle, folder, manifest, config, schema)
 
 
-def GeminiAnswer(prompt, latest, sensorsNow):
-    return _CallAi(ai.Answer, prompt)
+def GeminiAnswer(prompt, latest, sensorsNow, image=None):
+    return _CallAi(ai.Answer, prompt, image)
 
 
-PROVIDERS = {"mock": MockProvider, "gemini": GeminiProvider}
-ASKERS = {"mock": MockAnswer, "gemini": GeminiAnswer}
-PROVIDER_LABELS = {"mock": "Mock (offline, not a real AI)", "gemini": "Gemini (Google Vertex AI)"}
-DEFAULT_PROVIDER = "mock"   # works on any computer; switch to Gemini in Settings
+def ClaudeProvider(folder, manifest, config):
+    schema = ReadJson(folder / manifest["schema"], None) or ReadJson(PROMPTS / "response-schema.json", {})
+    return _CallAi(claude_ai.AnalyzeBundle, folder, manifest, config, schema)
+
+
+def ClaudeAnswer(prompt, latest, sensorsNow, image=None):
+    return _CallAi(claude_ai.Answer, prompt, image)
+
+
+PROVIDERS = {"mock": MockProvider, "claude": ClaudeProvider, "gemini": GeminiProvider}
+ASKERS = {"mock": MockAnswer, "claude": ClaudeAnswer, "gemini": GeminiAnswer}
+PINGS = {"claude": lambda: claude_ai.Ping(), "gemini": lambda: ai.Ping()}   # looked up at call time, so tests can patch them
+PROVIDER_LABELS = {"mock": "Mock (offline, not a real AI)", "claude": "Claude (Anthropic API)",
+                   "gemini": "Gemini (Google Vertex AI)"}
+DEFAULT_PROVIDER = "mock"   # works on any computer; switch to a real AI in Settings
 DETAIL_KEYS = ["model", "seconds", "tokens", "notes"]   # what a provider may add to a saved analysis
 
 
@@ -596,15 +622,31 @@ def CurrentProvider():
 
 def AiStatus():
     """What the Settings page shows: the provider in use and whether each one is ready."""
-    gemini = ai.Status()
+    gemini, claude = ai.Status(), claude_ai.Status()
     return {
         "provider": CurrentProvider(),
         "providers": [
             {"name": "mock", "label": PROVIDER_LABELS["mock"], "ready": True,
              "detail": "Runs on this computer. Estimates position from dark pixels; every other field is a placeholder."},
+            {"name": "claude", "label": PROVIDER_LABELS["claude"], "ready": claude["ready"], "detail": claude["detail"],
+             "apiKey": {"saved": claude["keySaved"], "mask": claude["keyMask"]}},   # never the key itself
             {"name": "gemini", "label": PROVIDER_LABELS["gemini"], "ready": gemini["ready"], "detail": gemini["detail"]},
         ],
     }
+
+
+def SaveClaudeKey(key):
+    """Save the Anthropic API key on this computer (data/claude-key.json, git-ignored)."""
+    _CallAi(claude_ai.SaveKey, key)
+    return AiStatus()
+
+
+def RemoveClaudeKey():
+    """Forget the saved key. If Claude was in use and is no longer ready, go back to the Mock."""
+    claude_ai.RemoveKey()
+    if CurrentProvider() == "claude" and not claude_ai.Status()["ready"]:
+        WriteJson(AI_SETTINGS, {"provider": DEFAULT_PROVIDER})
+    return AiStatus()
 
 
 def SetProvider(name):
@@ -623,7 +665,7 @@ def TestProvider():
     name = CurrentProvider()
     if name == "mock":
         return {"provider": name, "ok": True, "message": "The Mock provider runs offline, so there is nothing to connect to."}
-    return {"provider": name, "ok": True, "message": _CallAi(ai.Ping)}
+    return {"provider": name, "ok": True, "message": _CallAi(PINGS[name])}
 
 
 def SendPrompt(mode, lizardId, bundleId):
@@ -643,8 +685,26 @@ def SendPrompt(mode, lizardId, bundleId):
     return entry
 
 
-def AskQuestion(mode, lizardId, question, nowIso):
-    """Answer a keeper's question from prompts/ask.txt; returns the answer and the prompt sent."""
+def CurrentPicture(mode, config, now, maxWidth=1280):
+    """The camera picture at this moment, as JPEG bytes, for a question with vision."""
+    offset = SourceOffsetSeconds(config, now)
+    if offset is None:
+        raise RepTrackerError(f"{config['name']}'s camera starts at {LabelTime(ParseTime(config['createdAt']))}; there is no picture yet.")
+    video = config["camera"]["video"]
+    duration = VideoDurationSeconds(mode, video)
+    img = TakeAPicture(mode, video, min(offset % duration, max(duration - 0.5, 0)))
+    if img.width > maxWidth:
+        img = img.resize((maxWidth, round(maxWidth * img.height / img.width)))
+    out = io.BytesIO()
+    img.save(out, format="JPEG", quality=85)
+    return out.getvalue()
+
+
+def AskQuestion(mode, lizardId, question, nowIso, vision=False):
+    """Answer a keeper's question from prompts/ask.txt; returns the answer and the prompt sent.
+
+    With vision, the camera picture at nowIso is sent too, and returned as a data: URL for the page.
+    """
     config = LoadConfig(mode, lizardId)
     question = str(question or "").strip()[:500]
     if not question:
@@ -653,12 +713,18 @@ def AskQuestion(mode, lizardId, question, nowIso):
     latest = analyses[-1] if analyses else None
     now = ParseTime(nowIso)
     sensorsNow = SensorsNow(mode, config, now)
+    image = CurrentPicture(mode, config, now) if vision else None
     prompt = FillTemplate("ask.txt", {
+        "image_note": (f"A picture from the camera at {LabelTime(now)} is attached. Use it to answer." if image
+                       else "No picture is attached."),
         "name": config["name"], "species": config["species"], "question": question,
         "sensor_now": sensorsNow,
         "analysis_range": f"{latest['range']['start']} to {latest['range']['end']}" if latest else "none",
         "latest_analysis": json.dumps(latest["result"], indent=2) if latest else "None yet.",
     })
     provider = CurrentProvider()
-    answer = ASKERS[provider](prompt, latest, sensorsNow)
-    return {"answer": answer, "prompt": prompt, "provider": provider}
+    answer = ASKERS[provider](prompt, latest, sensorsNow, image)
+    reply = {"answer": answer, "prompt": prompt, "provider": provider}
+    if image:
+        reply["image"] = "data:image/jpeg;base64," + base64.standard_b64encode(image).decode("ascii")
+    return reply

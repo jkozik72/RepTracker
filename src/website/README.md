@@ -21,6 +21,7 @@ Open http://127.0.0.1:5000.
 | Clock | Real time | Clock bar above the alerts: speed, set time, pause, resume |
 | Uploads | — | Videos (.mp4, several at once, up to 3 GB each, with a progress bar) and sensor files (.json) into the current mode, in Settings |
 | Per lizard | — | Generate, inspect and send prompts for a time range |
+| Hourly AI call (Settings, off by default) | Each hour mark of real time | Each hour mark of the dev clock (faster when sped up) |
 
 - **Toy** (`data/toy/`): sample lizards, videos and sensors, committed.
 - **Main** (`data/main/`): starts empty; the keeper uploads media and adds lizards. Git-ignored.
@@ -63,16 +64,34 @@ Shared: `data/defaults/sensors/*.json` (default sensor files, committed, availab
 
 ## AI provider
 
-Not decided yet (Q11). Two providers are registered in `main.py` (`PROVIDERS`, `ASKERS`); choose one under **Settings → dev mode → AI provider**. The choice is per computer (`data/ai-settings.json`, git-ignored) and applies to analyses and questions.
+The project uses the **Claude API** ([D4](../../docs/decisions.md)). Three providers are registered in `main.py` (`PROVIDERS`, `ASKERS`); choose one under **Settings → dev mode → AI provider**. The choice is per computer (`data/ai-settings.json`, git-ignored) and applies to analyses and questions.
 
 | Provider | What it is | Needs |
 |---|---|---|
 | **Mock** (default) | Offline stand-in: position from dark pixels, placeholders for everything else | Nothing |
-| **Gemini** | Gemini through Google Vertex AI (`ai.py`), being tried | A Google Cloud project with Vertex AI enabled, and this computer signed in to it |
+| **Claude** | The Claude API (`claude_ai.py`), model `claude-opus-5-5` | An Anthropic API key |
+| **Gemini** | Gemini through Google Vertex AI (`ai.py`) | A Google Cloud project with Vertex AI enabled, and this computer signed in to it |
+
+### Set up Claude (once per computer)
+
+1. Make an API key in the Claude Console (API keys page).
+2. In the app: **Settings → dev mode → AI provider → Claude**, paste the key, **Save key**.
+3. Select **Claude**, then **Test connection**. The same check from a terminal: `python claude_ai.py`.
+
+The key is kept only on the computer that runs `app.py`, in `data/claude-key.json` (git-ignored), and the page only ever shows a masked version (`sk-ant-…1234`). **Remove** deletes it. Without a saved key, the `ANTHROPIC_API_KEY` environment variable is used instead.
+
+- One analysis is one request. The reply is constrained to `prompts/response-schema.json` (structured outputs). If Claude declines a request, Anthropic's server-side fallback re-runs it on another Claude model in the same call; the saved analysis notes it.
+- Limits checked before sending: 30 MB per request and 600 PDF pages (images). Longer ranges ask for a shorter one.
+- Each call is billed to the key's Anthropic account.
+
+| Environment variable (optional) | Default |
+|---|---|
+| `ANTHROPIC_API_KEY` | none; used only when no key is saved in Settings |
+| `REPTRACKER_CLAUDE_MODEL` | `claude-opus-5-5` |
 
 ### Set up Gemini (once per computer)
 
-There is no API key (Q20). The app uses the Google login of the computer it runs on:
+There is no API key. The app uses the Google login of the computer it runs on:
 
 ```
 gcloud auth application-default login
