@@ -44,6 +44,8 @@ Terms and meanings come from the 2026-11-14 notes: the [brief](notes/2026-11-14-
 | alert | A notice to the user at the top of the dashboard. | |
 | LLM, VLM | Large language model; vision-language model. | |
 | DSP | Digital signal processing. The board's label for the motion-tracking stage. | |
+| live camera | This computer's camera (`camera.py`): an animal's camera with `source: "live"`. Its pictures are frames keyed by the time they were captured; it never loops. | webcam, stream |
+| frame store | The live camera's stored pictures: one JPEG per 10 s slot in `data/camera/frames/YYYYMMDD/HHMMSS.jpg`, kept 72 h. | buffer, recording |
 
 ## Reference
 
@@ -68,6 +70,10 @@ Every function that touches lizard data takes `mode` first: `toy` or `main`, eac
 | `CreateNewLizard` | Validates the add-lizard form, writes `reptiles/<id>/config.json`, adds it to `reptiles.json` | mode, form dict → `{id, config, latest}` |
 | `LizardConfigFromForm` | Validates the add/edit-lizard form into a config (name, species, width, camera, sensors) | mode, form dict, createdAt → config |
 | `UpdateLizard` | Edits a lizard: new config from the form; keeps its id, `createdAt` and analyses; renames it in `reptiles.json` | mode, id, form dict → `{id, config, latest}` |
+| `IsLiveCamera` | Whether the lizard's camera is the live camera (`camera.source == "live"`) | config → bool |
+| `CameraFromForm` | The camera part of a config: a video `{view, video}`, or `{view, source: "live", video: null}` for the form value `@live` (refused when the camera is off) | form camera, media → dict |
+| `LiveFrame` | The live camera's stored frame nearest a time that opens as an image; damaged files skipped | time → (frameTime, path) / None |
+| `LivePictureAt` | The live picture for now: the fresh newest frame, else the stored one | time → PIL image / None |
 | `DeleteVideo` | Deletes an uploaded camera video for good; refuses the committed samples and a video a lizard still uses | mode, name → same as `ListMedia` |
 | `ProfileBrief` | A lizard's species profile as the dashboard needs it: name and the ranges for sensor alerts | species text → dict or None |
 | `CreateProfile` | Researches a species with the provider in use (`RESEARCHERS`), checks the reply, fetches photos, saves it; refuses a duplicate unless regenerating | species, regenerate → record with `usedBy` |
@@ -107,6 +113,21 @@ Every function that touches lizard data takes `mode` first: `toy` or `main`, eac
 | `SaveClaudeKey` | Saves the Anthropic API key on this computer through `claude_ai.SaveKey` | key → same as `AiStatus` |
 | `SetClaudeModel` | Chooses the Claude model through `claude_ai.SetModel` | model id → same as `AiStatus` |
 | `RemoveClaudeKey` | Deletes the saved key; switches back to the Mock if Claude was in use and is no longer ready | none → same as `AiStatus` |
+
+### `src/website/camera.py`
+
+The live camera, one per computer. Source: `docs/notes/2026-11-15-live-camera-chat.md`; design still an open question (Q21).
+
+| Function | Does | In → out |
+|---|---|---|
+| `StartCamera` / `StopCamera` | Starts or stops the capture and watchdog threads; device `off`, `pi` (`rpicam-vid`) or `test` (ffmpeg replays a toy video) | device → none |
+| `CaptureCommand` | The child process that writes MJPEG to stdout; `pi` adds `REPTRACKER_CAMERA_ARGS` | device → argv |
+| `SplitJpegs` | Cuts complete JPEGs out of the byte stream | bytes → (frames, rest) |
+| `SaveFrame` | Stores a frame as its 10 s slot's picture if the slot has none (`.part`, fsync, rename) | time, jpeg → bool |
+| `FrameCandidates` / `FrameAt` | Stored frames nearest a time within 30 s, nearest first; empty files skipped | time → (frameTime, path) / None |
+| `LatestFrame` | The newest frame, in memory | → (time, jpeg) / None |
+| `PruneFrames` | Deletes frames older than 72 h (`KEEP_HOURS`) | now → none |
+| `CameraStatus` | Device, running, last frame time, error, retention, server time | → dict |
 
 ### `src/website/ai.py`
 
@@ -187,7 +208,7 @@ This installation (D8). Update, restart and uninstall only where `src/pi/install
 |---|---|
 | `install.sh` | Installs or updates RepTracker on a Pi: packages, `reptracker` user, repo, venv, `/etc/reptracker.env`, hostname, sudo rule, service |
 | `reptracker-admin` | `update [branch]`, `restart`, `uninstall [--delete-data]`, `status`, `log`; long tasks run as a `systemd-run` unit and log to `/opt/reptracker/task.log` |
-| `reptracker.service` | The systemd unit: runs `app.py --lan` as `reptracker`, restarts on exit |
+| `reptracker.service` | The systemd unit: runs `app.py --lan` as `reptracker` (group `video` for the camera), restarts on exit |
 
 ### `src/website/alerts.py`, `scheduler.py`, `push.py`
 

@@ -52,3 +52,6 @@ src/website/data/secret_key
 src/website/data/tls/
 src/website/data/push/
 src/website/data/schedule.json
+
+# Live camera frames (camera.py)
+src/website/data/camera/

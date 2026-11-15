@@ -23,6 +23,8 @@ It prints the addresses to open (for example `https://192.168.1.20:5000`); **Set
 
 **Automatic analysis and phone alerts** (Settings): the server analyses every Main-mode animal at a set interval, even with no page open, and sends each new alert to the phones and browsers that turned alerts on (D10). A phone needs the RepTracker certificate first (Settings → Open on your phone, D9).
 
+Live camera: `--camera pi` uses the Raspberry Pi camera (`rpicam-vid`); `--camera test` replays a toy video as a stand-in on any computer (default `off`, or `REPTRACKER_CAMERA`). An animal then gets **Live camera (this computer)** as its video. Pictures are kept in `data/camera/frames/` for 72 h (`camera.py`).
+
 On a Raspberry Pi, one command installs it as a service at `https://reptracker.local`: see [src/pi/README.md](../pi/README.md). Settings then has update, restart and uninstall.
 
 ## Modes

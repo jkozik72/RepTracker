@@ -1,11 +1,13 @@
 import argparse
 import json
+import os
 from datetime import timedelta
 
 from flask import Flask, jsonify, redirect, render_template, request, send_from_directory, session
 from werkzeug.exceptions import HTTPException
 
 import auth
+import camera
 import main
 import push
 import scheduler
@@ -17,7 +19,7 @@ app.secret_key = auth.SecretKey()
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Strict",
                   PERMANENT_SESSION_LIFETIME=timedelta(days=30))
 MAX_UPLOAD_GB = 3
-app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_GB * 1024 ** 3   # streamed to a temp file, then to disk
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_GB * 1024 ** 3   # streamed straight to disk (main.SaveUpload)
 
 
 @app.errorhandler(RepTrackerError)
@@ -258,6 +260,31 @@ def video(mode, name):
     return send_from_directory(main.VideosDir(mode), name)
 
 
+# ---------- the live camera (one per computer) ----------
+
+@app.get("/api/camera")
+def camera_status():
+    return jsonify(camera.CameraStatus())
+
+
+@app.get("/media/camera/picture")
+def camera_picture():
+    """The live camera's picture as JPEG: the newest frame (if under camera.FRESH_S old), or with ?t=<ISO time>
+    the stored frame nearest t. Any other query (the page adds &n=<counter>) is ignored; it only defeats caching."""
+    t = request.args.get("t")
+    if t:
+        found = main.LiveFrame(main.ParseTime(t))
+        if not found:
+            return jsonify({"error": "No camera picture for that time."}), 404
+        data = found[1].read_bytes()
+    else:
+        latest = camera.LatestFrame()
+        if not latest or (main.datetime.now(main.timezone.utc) - latest[0]).total_seconds() > camera.FRESH_S:
+            return jsonify({"error": camera.CameraStatus()["error"] or "No picture from the camera right now."}), 404
+        data = latest[1]
+    return app.response_class(data, mimetype="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
 @app.get("/media/<mode>/sensors/<path:name>")
 def sensor(mode, name):
     path = main.SensorPath(mode, name.removesuffix(".json"))   # mode upload, else shared default
@@ -455,7 +482,12 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=5000)
     parser.add_argument("--http-redirect", type=int, default=0, metavar="PORT",
                         help="with --lan: also listen on this plain-HTTP port, only to redirect to HTTPS (0 = off)")
+    parser.add_argument("--camera", choices=camera.DEVICES, default=os.environ.get("REPTRACKER_CAMERA", "off"),
+                        help="live camera: off, pi (Raspberry Pi camera through rpicam-vid) or test (replays a toy video)")
     args = parser.parse_args()
+    # Not in the debug reloader's parent process, which only watches files: the camera has one owner.
+    if args.lan or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        camera.StartCamera(args.camera)
     if args.lan:
         ServeLan(args.port, args.http_redirect)
     else:

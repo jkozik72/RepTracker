@@ -96,7 +96,7 @@
   .lizard-name { font-size: 20px; font-weight: 700; margin: 0; display: inline; }
   .lizard-meta { color: var(--muted); font-size: 14px; margin-left: 8px; }
   .video { aspect-ratio: 16 / 9; background: #0d0f0c; border-radius: 10px; overflow: hidden; position: relative; display: grid; place-items: center; color: #9aa294; font-size: 14px; }
-  .video video { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .video video, .video img[data-live] { width: 100%; height: 100%; object-fit: contain; display: block; }
   .video .badge { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,.62); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; letter-spacing: .03em; font-variant-numeric: tabular-nums; }
   .video .badge.r { left: auto; right: 8px; }
   .video .badge { max-width: calc(50% - 12px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -839,7 +839,9 @@ const STATUS_LABEL = { ok: "Healthy", warn: "Watch", bad: "Alert", none: "Not an
 function renderSummary() {
   const el = $("#summary");
   if (!lizards.length) {
-    el.innerHTML = `<span class="summary-count">No animals yet</span><span class="hint" style="margin:0">${mode() === "main" && !media.videos.length
+    el.innerHTML = `<span class="summary-count">No animals yet</span><span class="hint" style="margin:0">${mode() === "main" && media.liveCamera
+      ? "Main mode starts empty. Add an animal below and pick \"Live camera\" as its video."
+      : mode() === "main" && !media.videos.length
       ? "Main mode starts empty. Turn on dev mode in Settings to upload a camera video (default sensor files are built in), then add an animal below."
       : "Add one below to start tracking."}</span>`;
     return;
@@ -877,9 +879,12 @@ function aiStatsHtml(l) {
 }
 
 function renderVideoBox(c, fullscreen = false) {
+  const live = c.camera.source === "live";
   return `<div class="video">
-      <video src="/media/${mode()}/videos/${encodeURIComponent(c.camera.video)}.mp4" muted playsinline preload="auto" data-video></video>
-      <span class="badge" data-cam-time></span><span class="badge r" title="Source: ${esc(c.camera.video)}.mp4">Source: ${esc(c.camera.video)}</span>
+      ${live ? `<img data-live alt="Live camera picture">`
+             : `<video src="/media/${mode()}/videos/${encodeURIComponent(c.camera.video)}.mp4" muted playsinline preload="auto" data-video></video>`}
+      <span class="badge" data-cam-time></span>${live ? `<span class="badge r" title="This computer's camera">Source: Live camera</span>`
+        : `<span class="badge r" title="Source: ${esc(c.camera.video)}.mp4">Source: ${esc(c.camera.video)}</span>`}
       <div class="cover" data-cover hidden></div>
       ${fullscreen ? `<button class="video-fs" type="button" data-action="fullscreen" title="Full screen (Esc to exit)" aria-label="Show the video full screen">⛶</button>` : ""}
     </div>`;
@@ -1315,13 +1320,19 @@ function tick(forceCharts) {
     const card = document.getElementById(`lizard-${l.id}`);
     if (!card) continue;
     const created = Date.parse(l.config.createdAt), offsetS = (now - created) / 1000;
-    const cover = card.querySelector("[data-cover]"), v = card.querySelector("[data-video]");
+    const cover = card.querySelector("[data-cover]"), v = card.querySelector("[data-video]"), liveImg = card.querySelector("[data-live]");
+    try {   // one card's error must not stop the others
+    if (liveImg) {
+      syncLive(liveImg, cover, now, speed);
+      card.querySelector("[data-cam-time]").textContent = `${liveImg.dataset.real === "1" && liveImg.dataset.ok === "1" ? "LIVE" : "RECORDED"} · ${fmtTime(now)}`;
+    } else {
     card.querySelector("[data-cam-time]").textContent = `${speed === 1 ? "LIVE" : speed === 0 ? "PAUSED" : speed + "×"} · ${fmtTime(now)}`;
     if (offsetS < 0) {
       cover.hidden = false; cover.textContent = `Camera starts ${fmtShort(created)}`; v.pause();
     } else {
       cover.hidden = true;
       syncVideo(v, offsetS, speed);
+    }
     }
     channels(l.config).forEach((ch, i) => {
       const el = card.querySelector(`[data-sensor="${i}"]`);
@@ -1331,6 +1342,7 @@ function tick(forceCharts) {
     });
     if (drawCharts) { renderSensorCharts(card, l, now); checkSensorRanges(l, now); envSummary(card, l, offsetS); }
     followClockRange(card, now);
+    } catch (err) { console.error(`Card ${l.id}:`, err); }
   }
 }
 // The dev panel's time range: a preset ("last N minutes", ending now on the dashboard clock) that keeps
@@ -1349,6 +1361,29 @@ $("#lizards").addEventListener("input", e => {
 $("#lizards").addEventListener("change", e => {
   if (e.target.matches("[data-range-preset]")) followClockRange(e.target.closest(".lizard"), simNow());
 });
+// The live camera: an <img> that loads one picture at a time. At real time it shows the newest frame, about
+// 5 a second; when the dev clock is paused or off real time, the stored frame for the clock (10 s slots).
+// Every request carries a new &n= so the browser never reuses an earlier picture.
+let liveRequests = 0;
+function syncLive(img, cover, now, speed) {
+  if (img.dataset.busy === "1" || +(img.dataset.next || 0) > Date.now()) return;
+  const real = speed === 1 && Math.abs(now - Date.now()) < 2000;
+  const slot = real ? "now" : new Date(Math.floor(now / 10000) * 10000).toISOString().replace(/\.\d+Z$/, "Z");
+  if (!real && img.dataset.slot === slot) return;          // paused or replaying: only when the slot changes
+  img.dataset.busy = "1"; img.dataset.slot = slot;
+  const probe = new Image();
+  probe.onload = () => {
+    img.src = probe.src; img.dataset.ok = "1"; img.dataset.real = real ? "1" : "0";
+    img.dataset.busy = "0"; img.dataset.next = Date.now() + 200; cover.hidden = true;
+  };
+  probe.onerror = () => {
+    img.dataset.ok = "0"; img.dataset.busy = "0"; img.dataset.next = Date.now() + 1000;
+    if (!real) img.dataset.slot = "";                         // try that slot again
+    cover.hidden = false;
+    cover.textContent = real ? "No picture from the live camera right now" : `No camera picture for ${fmtTime(now)}`;
+  };
+  probe.src = `/media/camera/picture?${real ? "" : `t=${encodeURIComponent(slot)}&`}n=${++liveRequests}`;
+}
 // Keep the "camera" video at the moment that matches the clock; it loops like a live feed.
 function syncVideo(v, offsetS, speed) {
   const dur = v.duration;
@@ -1402,7 +1437,7 @@ async function showBundle(card, lizardId, m) {
         <div class="chunk-head"><strong>IMAGES chunk · ${c.frames.length} image${c.frames.length === 1 ? "" : "s"}</strong>
           <a class="btn" href="${base + c.pdf}" target="_blank" rel="noopener">Open ${esc(c.pdf)}</a></div>
         <pre>${esc(chunkTexts[i])}</pre>
-        <div class="thumbs">${c.frames.map(f => `<figure><img loading="lazy" src="${base + f.file}" alt="Frame at ${esc(f.label)}"><figcaption>${esc(f.label.slice(11, 16))} · v${f.videoSeconds}s</figcaption></figure>`).join("")}</div>
+        <div class="thumbs">${c.frames.map(f => `<figure><img loading="lazy" src="${base + f.file}" alt="Frame at ${esc(f.label)}"><figcaption>${esc(f.label.slice(11, 16))} · ${f.capturedAt ? `live ${esc(f.capturedAt.slice(11, 19))}` : `v${f.videoSeconds}s`}</figcaption></figure>`).join("")}</div>
       </div>`).join("")}
     <div class="form-actions" style="justify-content:flex-start">
       <button class="btn dev" type="button" data-action="send" data-bundle="${esc(m.bundleId)}">${esc(sendLabel())}</button>
@@ -1539,15 +1574,16 @@ function fillMediaSelects() {
   speciesHint();
   addForm.querySelectorAll("[data-media]").forEach(sel => {
     const list = media[sel.dataset.media];
-    sel.innerHTML = list.length ? list.map(n => `<option>${esc(n)}</option>`).join("") : `<option value="">No ${sel.dataset.media === "videos" ? "videos" : "sensor files"} yet</option>`;
+    const live = sel.dataset.media === "videos" && media.liveCamera ? `<option value="@live">Live camera (this computer)</option>` : "";
+    sel.innerHTML = list.length || live ? list.map(n => `<option>${esc(n)}</option>`).join("") + live : `<option value="">No ${sel.dataset.media === "videos" ? "videos" : "sensor files"} yet</option>`;
     const p = sel.dataset.prefer;
     const pref = p && (list.find(n => n.startsWith(p + "-f") || n.startsWith(p + "-rh")) || list.find(n => n.startsWith(p)));
     if (pref) sel.value = pref;
     guessUnit(sel);
   });
-  const missing = !media.videos.length || !media.sensors.length;
+  const noVideos = !media.videos.length && !media.liveCamera, missing = noVideos || !media.sensors.length;
   $("#media-hint").innerHTML = missing
-    ? `<span style="color:var(--bad)">${mode() === "main" ? "Main" : "Toy"} mode has no ${!media.videos.length ? "videos" : "sensor files"} yet. ${settings.devMode ? "Upload them in Settings." : "Turn on dev mode in Settings to upload them."}</span>`
+    ? `<span style="color:var(--bad)">${mode() === "main" ? "Main" : "Toy"} mode has no ${noVideos ? "videos" : "sensor files"} yet. ${settings.devMode ? "Upload them in Settings." : "Turn on dev mode in Settings to upload them."}</span>`
     : `Videos and sensor files come from ${mode()} mode's media${settings.devMode ? "; upload more in Settings" : ""}.`;
 }
 addForm.elements.species.addEventListener("input", () => { speciesHint(); renderSuggestions(addForm.elements.species, $("#f-species-suggest")); });
@@ -1567,7 +1603,7 @@ function openEdit(l) {
   $("#form-title").textContent = `Edit ${c.name}`; $("#form-submit").textContent = "Save changes";
   f.name.value = c.name; f.species.value = c.species; f.sex.value = c.sex || "unknown"; f.width.value = c.enclosureWidthCm ?? ""; speciesHint();
   renderSuggestions(f.species, $("#f-species-suggest"));
-  f.view.value = c.camera.view; f.video.value = c.camera.video;
+  f.view.value = c.camera.view; f.video.value = c.camera.source === "live" ? "@live" : c.camera.video;
   f.hotSide.value = c.sensors.hotSide; $("#f-coldside").textContent = c.sensors.hotSide === "left" ? "Right" : "Left";
   for (const [key, side] of [["hot", "hot"], ["cold", "cold"]]) {
     f[`${side}Temp`].value = c.sensors[key].temperature.series; f[`${side}TempUnit`].value = c.sensors[key].temperature.unit;
