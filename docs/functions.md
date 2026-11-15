@@ -80,7 +80,7 @@ Every function that touches lizard data takes `mode` first: `toy` or `main`, eac
 | `RemoveLizard` | Takes a lizard off `reptiles.json`; its folder stays | mode, id → none |
 | `ListLizards` | Every listed lizard with its config and latest analysis | mode → list |
 | `ListMedia` | Video and sensor file names without extension; sensors include the defaults | mode → `{videos, sensors, defaultSensors}` |
-| `SaveUpload` | Saves an uploaded .mp4 (streamed to disk, up to 3 GB) or sensor .json (up to 50 MB) into the mode's media; rejects duplicates, default names, unreadable videos, bad JSON | mode, kind, uploaded file → `{kind, name}` |
+| `SaveUpload` | Saves an uploaded .mp4 (up to 3 GB) or sensor .json (up to 50 MB) into the mode's media. The request body is the file itself (name in `X-File-Name`), streamed straight to a `.part` file and renamed when complete; rejects duplicates, default names, cut-off uploads, unreadable videos, bad JSON | mode, kind, file name, body stream, length → `{kind, name}` |
 | `DefaultSensorNames` | Names of the shared default sensor files in `data/defaults/sensors/` | → list |
 | `SensorPath` | Where a sensor file lives: the mode's uploads first, then the defaults | mode, name → path |
 | `CheckSeries` | Raises unless the sensor JSON is `{"t": ms > 0, "value": [numbers]}` | dict → none |

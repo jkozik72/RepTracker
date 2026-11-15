@@ -1834,9 +1834,11 @@ const MAX_UPLOAD_BYTES = 3 * 1024 ** 3;
 // fetch() can't report upload progress, so large videos go through XMLHttpRequest.
 function uploadWithProgress(url, file, onProgress) {
   return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest(), fd = new FormData();
-    fd.append("file", file);
+    // The file is the whole body (not a form), so the server can stream it straight to disk.
+    const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.setRequestHeader("X-File-Name", encodeURIComponent(file.name));
     xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.floor(e.loaded / e.total * 100)); };
     xhr.upload.onload = () => onProgress(100);
     xhr.onload = () => {
@@ -1845,7 +1847,7 @@ function uploadWithProgress(url, file, onProgress) {
       xhr.status >= 200 && xhr.status < 300 ? resolve(data) : reject(new Error(data.error || `Server error (${xhr.status})`));
     };
     xhr.onerror = () => reject(new Error("Upload failed: lost connection to the server."));
-    xhr.send(fd);
+    xhr.send(file);
   });
 }
 

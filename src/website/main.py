@@ -174,13 +174,17 @@ def MediaName(fileName):
 MAX_SENSOR_BYTES = 50 * 1024 * 1024
 
 
-def SaveUpload(mode, kind, upload):
+UPLOAD_CHUNK = 1024 * 1024
+
+
+def SaveUpload(mode, kind, fileName, stream, length=None):
     """Save an uploaded camera video (.mp4) or sensor series (.json) into this mode's media folder.
 
-    upload is the request's file (has .filename, .save(path) and .read()). Videos are streamed
-    to disk, so multi-GB files never sit in memory.
+    stream is the raw request body (the file itself, not a form). It is written straight to a ".part" file next
+    to its final place and renamed when complete: one write to disk, no temporary copy (on a Pi, /tmp can be in
+    memory, and every extra write to an SD card is slow).
     """
-    fileName = upload.filename or ""
+    fileName = fileName or ""
     name = MediaName(fileName)
     if kind == "videos":
         if not fileName.lower().endswith(".mp4"):
@@ -191,24 +195,37 @@ def SaveUpload(mode, kind, upload):
             raise RepTrackerError("Sensor data must be a .json file.")
         if name in DefaultSensorNames():
             raise RepTrackerError(f"'{name}' is a default sensor file; rename yours to upload it.")
-        data = upload.read(MAX_SENSOR_BYTES + 1)
-        if len(data) > MAX_SENSOR_BYTES:
+        if length and length > MAX_SENSOR_BYTES:
             raise RepTrackerError("Sensor files are limited to 50 MB.")
-        try:
-            series = json.loads(data.decode("utf-8-sig"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as err:
-            raise RepTrackerError(f"Not valid JSON: {err}")
-        CheckSeries(series)
         path = SensorsDir(mode) / f"{name}.json"
     else:
         raise RepTrackerError("Upload a video or a sensor file.")
     if path.exists():
         raise RepTrackerError(f"'{path.name}' already exists in {mode} mode; rename the file to upload it.")
     path.parent.mkdir(parents=True, exist_ok=True)
-    if kind == "videos":
-        upload.save(str(path))
-    else:
-        path.write_bytes(data)
+    part = path.with_name(path.name + ".part")
+    written = 0
+    try:
+        with open(part, "wb") as out:
+            while True:
+                chunk = stream.read(UPLOAD_CHUNK)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if kind == "sensors" and written > MAX_SENSOR_BYTES:
+                    raise RepTrackerError("Sensor files are limited to 50 MB.")
+                out.write(chunk)
+        if length is not None and written != length:
+            raise RepTrackerError("The upload was cut off before it finished. Try again.")
+        if kind == "sensors":
+            try:
+                series = json.loads(part.read_bytes().decode("utf-8-sig"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as err:
+                raise RepTrackerError(f"Not valid JSON: {err}")
+            CheckSeries(series)
+        part.replace(path)
+    finally:
+        part.unlink(missing_ok=True)
     if kind == "videos":
         try:
             if VideoDurationSeconds(mode, name) <= 0:

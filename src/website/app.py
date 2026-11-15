@@ -138,10 +138,12 @@ def media(mode):
 
 @app.post("/api/<mode>/media/<kind>")
 def upload_media(mode, kind):
-    file = request.files.get("file")
-    if not file:
+    """The body is the file itself (not a form), named by the X-File-Name header: it streams straight to disk."""
+    from urllib.parse import unquote
+    name = unquote(request.headers.get("X-File-Name", ""))
+    if not name or not request.content_length:
         raise RepTrackerError("Choose a file to upload.")
-    return jsonify(main.SaveUpload(mode, kind, file)), 201
+    return jsonify(main.SaveUpload(mode, kind, name, request.stream, request.content_length)), 201
 
 
 @app.delete("/api/<mode>/media/videos/<name>")
