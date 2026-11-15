@@ -1422,7 +1422,8 @@ function syncLive(img, cover, now, speed) {
     img.dataset.ok = "0"; img.dataset.busy = "0"; img.dataset.next = Date.now() + 1000;
     if (!real) img.dataset.slot = "";                         // try that slot again
     cover.hidden = false;
-    cover.textContent = real ? "No picture from the live camera right now" : `No camera picture for ${fmtTime(now)}`;
+    cover.textContent = real ? "No picture from the live camera right now"
+      : `No camera picture for ${fmtTime(now)}. The dev clock is not at real time: set it to now to see the live picture.`;
   };
   probe.src = `/media/camera/picture?${real ? "" : `t=${encodeURIComponent(slot)}&`}n=${++liveRequests}`;
 }

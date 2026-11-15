@@ -283,10 +283,18 @@ def camera_picture():
     the stored frame nearest t. Any other query (the page adds &n=<counter>) is ignored; it only defeats caching."""
     t = request.args.get("t")
     if t:
-        found = main.LiveFrame(main.ParseTime(t))
-        if not found:
+        # A stored frame; a time at or after the newest frame (the browser's clock ahead of this computer's,
+        # or the dev clock run forward) gets the newest frame, as long as the camera is live.
+        when = main.ParseTime(t)
+        found = main.LiveFrame(when)
+        latest = camera.LatestFrame()
+        if found:
+            data = found[1].read_bytes()
+        elif (latest and when >= latest[0] - main.timedelta(seconds=camera.FRESH_S)
+              and (main.datetime.now(main.timezone.utc) - latest[0]).total_seconds() <= camera.FRESH_S):
+            data = latest[1]
+        else:
             return jsonify({"error": "No camera picture for that time."}), 404
-        data = found[1].read_bytes()
     else:
         latest = camera.LatestFrame()
         if not latest or (main.datetime.now(main.timezone.utc) - latest[0]).total_seconds() > camera.FRESH_S:

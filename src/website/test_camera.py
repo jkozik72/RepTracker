@@ -208,6 +208,8 @@ class PictureRouteTest(unittest.TestCase):
             r = self.client.get("/media/camera/picture?n=2")
             self.assertEqual((r.status_code, r.mimetype, r.data), (200, "image/jpeg", jpeg))
             self.assertEqual(r.headers["Cache-Control"], "no-store")
+            ahead = (datetime.now(timezone.utc) + timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            self.assertEqual(self.client.get(f"/media/camera/picture?t={ahead}").data, jpeg)   # clock ahead: newest
         camera.SaveFrame(T0, jpeg)
         self.assertEqual(self.client.get("/media/camera/picture?t=2026-11-15T10:00:05Z&n=3").status_code, 200)
         self.assertEqual(self.client.get("/media/camera/picture?t=2026-11-15T11:00:00Z").status_code, 404)
