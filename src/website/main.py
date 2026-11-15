@@ -25,11 +25,14 @@ from pathlib import Path
 import imageio_ffmpeg
 from PIL import Image, ImageDraw
 
+import ai
+
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 DEFAULT_SENSORS = DATA / "defaults" / "sensors"   # shared by every mode, committed, never overwritten
 PROMPTS = ROOT / "prompts"
 RESEARCH = ROOT / "research"
+AI_SETTINGS = DATA / "ai-settings.json"   # which AI provider this computer uses (git-ignored)
 
 MODES = ["toy", "main"]
 SPECIES = ["leopard gecko", "skink"]
@@ -510,8 +513,12 @@ def LoadBundle(mode, lizardId, bundleId):
 
 
 # ---------- AI providers ----------
-# The provider is not chosen yet (Q11 on main). "mock" runs offline so the whole loop can be tested;
-# a real provider is a function with the same signature added to PROVIDERS.
+# A provider is two functions with fixed signatures, registered under one name:
+#   PROVIDERS[name](folder, manifest, config) -> a dict shaped like prompts/response-schema.json,
+#                                                 plus an optional "_details" dict (see DETAIL_KEYS)
+#   ASKERS[name](prompt, latest, sensorsNow)  -> the answer to a keeper's question, as text
+# "mock" runs offline so the whole loop can be tested without an AI. "gemini" is the real one
+# (ai.py). The provider in use is chosen in Settings (dev mode) and saved in data/ai-settings.json.
 
 def _MockPosition(img, scale):
     """Mock-only stand-in for the AI: x of the dark pixels (the sample lizard is the darkest thing)."""
@@ -551,16 +558,83 @@ def MockProvider(folder, manifest, config):
     }
 
 
-PROVIDERS = {"mock": MockProvider}
-PROVIDER = "mock"   # until Q11 is decided
+def MockAnswer(prompt, latest, sensorsNow):
+    return ("[Mock provider, not a real AI] I can't reason about the question, but here is what I would use: "
+            + (latest["result"]["Analysis"] if latest else "there is no analysis yet.")
+            + " Current readings: " + sensorsNow.replace("\n", "; "))
+
+
+def _CallAi(fn, *args):
+    """Run a function from ai.py; its errors become messages the dashboard can show."""
+    try:
+        return fn(*args)
+    except ai.AiError as err:
+        raise RepTrackerError(str(err)) from err
+
+
+def GeminiProvider(folder, manifest, config):
+    schema = ReadJson(folder / manifest["schema"], None) or ReadJson(PROMPTS / "response-schema.json", {})
+    return _CallAi(ai.AnalyzeBundle, folder, manifest, config, schema)
+
+
+def GeminiAnswer(prompt, latest, sensorsNow):
+    return _CallAi(ai.Answer, prompt)
+
+
+PROVIDERS = {"mock": MockProvider, "gemini": GeminiProvider}
+ASKERS = {"mock": MockAnswer, "gemini": GeminiAnswer}
+PROVIDER_LABELS = {"mock": "Mock (offline, not a real AI)", "gemini": "Gemini (Google Vertex AI)"}
+DEFAULT_PROVIDER = "mock"   # works on any computer; switch to Gemini in Settings
+DETAIL_KEYS = ["model", "seconds", "tokens", "notes"]   # what a provider may add to a saved analysis
+
+
+def CurrentProvider():
+    """The provider chosen in Settings, or the default if none was chosen."""
+    name = ReadJson(AI_SETTINGS, {}).get("provider")
+    return name if name in PROVIDERS else DEFAULT_PROVIDER
+
+
+def AiStatus():
+    """What the Settings page shows: the provider in use and whether each one is ready."""
+    gemini = ai.Status()
+    return {
+        "provider": CurrentProvider(),
+        "providers": [
+            {"name": "mock", "label": PROVIDER_LABELS["mock"], "ready": True,
+             "detail": "Runs on this computer. Estimates position from dark pixels; every other field is a placeholder."},
+            {"name": "gemini", "label": PROVIDER_LABELS["gemini"], "ready": gemini["ready"], "detail": gemini["detail"]},
+        ],
+    }
+
+
+def SetProvider(name):
+    """Choose the AI provider for this computer. A provider that is not ready is refused."""
+    if name not in PROVIDERS:
+        raise RepTrackerError(f"Unknown AI provider. Choose one of: {', '.join(PROVIDERS)}.")
+    status = next(p for p in AiStatus()["providers"] if p["name"] == name)
+    if not status["ready"]:
+        raise RepTrackerError(f"{status['label']} is not ready: {status['detail']}")
+    WriteJson(AI_SETTINGS, {"provider": name})
+    return AiStatus()
+
+
+def TestProvider():
+    """Make one tiny request to the provider in use, to prove the connection before a demo."""
+    name = CurrentProvider()
+    if name == "mock":
+        return {"provider": name, "ok": True, "message": "The Mock provider runs offline, so there is nothing to connect to."}
+    return {"provider": name, "ok": True, "message": _CallAi(ai.Ping)}
 
 
 def SendPrompt(mode, lizardId, bundleId):
     """Send a generated bundle to the AI provider, save the answer to analyses.json, and return it."""
     folder, manifest = LoadBundle(mode, lizardId, bundleId)
     config = LoadConfig(mode, lizardId)
-    result = PROVIDERS[PROVIDER](folder, manifest, config)
-    entry = {"bundleId": bundleId, "provider": PROVIDER, "range": manifest["range"],
+    provider = CurrentProvider()
+    result = PROVIDERS[provider](folder, manifest, config)
+    details = result.pop("_details", None) or {}
+    entry = {"bundleId": bundleId, "provider": provider,
+             **{key: details[key] for key in DETAIL_KEYS if key in details}, "range": manifest["range"],
              "sentAt": FormatTime(datetime.now(timezone.utc)), "result": result}
     path = LizardFolder(mode, lizardId) / "analyses.json"
     analyses = ReadJson(path, [])
@@ -578,13 +652,13 @@ def AskQuestion(mode, lizardId, question, nowIso):
     analyses = ReadJson(LizardFolder(mode, lizardId) / "analyses.json", [])
     latest = analyses[-1] if analyses else None
     now = ParseTime(nowIso)
+    sensorsNow = SensorsNow(mode, config, now)
     prompt = FillTemplate("ask.txt", {
         "name": config["name"], "species": config["species"], "question": question,
-        "sensor_now": SensorsNow(mode, config, now),
+        "sensor_now": sensorsNow,
         "analysis_range": f"{latest['range']['start']} to {latest['range']['end']}" if latest else "none",
         "latest_analysis": json.dumps(latest["result"], indent=2) if latest else "None yet.",
     })
-    answer = ("[Mock provider, not a real AI] I can't reason about the question, but here is what I would use: "
-              + (latest["result"]["Analysis"] if latest else "there is no analysis yet.")
-              + " Current readings: " + SensorsNow(mode, config, now).replace("\n", "; "))
-    return {"answer": answer, "prompt": prompt}
+    provider = CurrentProvider()
+    answer = ASKERS[provider](prompt, latest, sensorsNow)
+    return {"answer": answer, "prompt": prompt, "provider": provider}

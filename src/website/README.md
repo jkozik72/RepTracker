@@ -63,4 +63,40 @@ Shared: `data/defaults/sensors/*.json` (default sensor files, committed, availab
 
 ## AI provider
 
-Not chosen yet (Q11), so every request goes to the offline **Mock** provider (`PROVIDER` in `main.py`). Add a real one as a function in `PROVIDERS`; it will also need a way to supply its API key.
+Not decided yet (Q11). Two providers are registered in `main.py` (`PROVIDERS`, `ASKERS`); choose one under **Settings → dev mode → AI provider**. The choice is per computer (`data/ai-settings.json`, git-ignored) and applies to analyses and questions.
+
+| Provider | What it is | Needs |
+|---|---|---|
+| **Mock** (default) | Offline stand-in: position from dark pixels, placeholders for everything else | Nothing |
+| **Gemini** | Gemini through Google Vertex AI (`ai.py`), being tried | A Google Cloud project with Vertex AI enabled, and this computer signed in to it |
+
+### Set up Gemini (once per computer)
+
+There is no API key (Q20). The app uses the Google login of the computer it runs on:
+
+```
+gcloud auth application-default login
+gcloud auth application-default set-quota-project <project id>
+```
+
+Then restart `app.py`. In Settings, Gemini shows **Ready** when the package, the login and a project are found; **Test connection** sends one short request to prove it works. The same check from a terminal: `python ai.py`.
+
+Never commit a project ID, a key, or a credentials file. Nothing in this folder needs one.
+
+| Environment variable (optional) | Default |
+|---|---|
+| `GOOGLE_CLOUD_PROJECT` | the quota project of the login above |
+| `GOOGLE_CLOUD_LOCATION` | `global` |
+| `REPTRACKER_MODEL` | `gemini-3.8-flash` |
+
+### What one analysis sends
+
+One HTTPS request per "Send to AI": `system.txt` as the system instruction, then `context.txt` and each IMAGES chunk's text and PDF, in order. No retries and no follow-up requests. The reply must be JSON; `ai.NormalizeResult` forces it into `prompts/response-schema.json`, and nothing is saved if the call fails or the reply cannot be used. Limits set in `ai.py`, not measured against Google's: 18 MB per request (`MAX_REQUEST_MB`), 300 s per analysis (`ANALYSIS_TIMEOUT_S`).
+
+### Tests
+
+```
+python -m unittest test_ai -v
+```
+
+They never call Google. The tests that drive the real `google-genai` package are skipped when it is not installed.

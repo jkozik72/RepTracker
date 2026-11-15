@@ -1,4 +1,5 @@
 from flask import Flask, jsonify, render_template, request, send_from_directory
+from werkzeug.exceptions import HTTPException
 
 import main
 from main import RepTrackerError
@@ -16,6 +17,16 @@ def handle_error(err):
 @app.errorhandler(413)
 def too_large(err):
     return jsonify({"error": f"File is larger than {MAX_UPLOAD_GB} GB."}), 413
+
+
+@app.errorhandler(Exception)
+def unexpected(err):
+    """A bug or an error nobody planned for: the page gets a sentence, the terminal gets the details."""
+    if isinstance(err, HTTPException):
+        return err
+    app.logger.exception("Unexpected error")
+    return jsonify({"error": f"Unexpected error in the server ({type(err).__name__}). "
+                             "The details are in the terminal that runs app.py."}), 500
 
 
 @app.route("/")
@@ -67,6 +78,24 @@ def create_lizard(mode):
 def remove_lizard(mode, lizard_id):
     main.RemoveLizard(mode, lizard_id)
     return "", 204
+
+
+# ---------- AI provider (one choice for this computer, not per mode) ----------
+
+@app.get("/api/ai")
+def ai_status():
+    return jsonify(main.AiStatus())
+
+
+@app.post("/api/ai")
+def set_ai_provider():
+    body = request.get_json(force=True) or {}
+    return jsonify(main.SetProvider(body.get("provider")))
+
+
+@app.post("/api/ai/test")
+def test_ai_provider():
+    return jsonify(main.TestProvider())
 
 
 # ---------- prompts and AI ----------

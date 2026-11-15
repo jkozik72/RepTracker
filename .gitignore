@@ -34,3 +34,6 @@ src/website/data/toy/media/videos/*
 !src/website/data/toy/media/videos/gecko-top.mp4
 !src/website/data/toy/media/videos/skink-side.mp4
 !src/website/data/toy/media/videos/short-clip-top.mp4
+
+# Which AI provider this computer uses (chosen in Settings)
+src/website/data/ai-settings.json
