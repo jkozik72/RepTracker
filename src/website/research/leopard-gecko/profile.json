@@ -1,0 +1,149 @@
+{
+  "slug": "leopard-gecko",
+  "species": "leopard gecko",
+  "createdAt": "2026-11-15T15:38:26Z",
+  "provider": "mock",
+  "model": "mock",
+  "edited": false,
+  "profile": {
+    "commonName": "Leopard Gecko",
+    "scientificName": "unknown (Mock)",
+    "animalType": "other",
+    "activityPattern": "cathemeral",
+    "habitat": "terrestrial",
+    "summary": "[Mock provider, not real research] Placeholder profile for leopard gecko. Select Claude in Settings and regenerate for a real one.",
+    "adultSize": {
+      "lengthCm": {
+        "min": 10.0,
+        "max": 30.0
+      },
+      "weightG": {
+        "min": 20.0,
+        "max": 100.0
+      }
+    },
+    "lifespanYears": {
+      "min": 5.0,
+      "max": 15.0
+    },
+    "temperaturesF": {
+      "hotSide": {
+        "min": 88.0,
+        "max": 92.0
+      },
+      "coldSide": {
+        "min": 72.0,
+        "max": 78.0
+      },
+      "night": {
+        "min": 65.0,
+        "max": 75.0
+      },
+      "basking": {
+        "min": 90.0,
+        "max": 95.0
+      }
+    },
+    "humidityPercent": {
+      "min": 30.0,
+      "max": 50.0
+    },
+    "uvb": "Mock: unknown.",
+    "diet": "Mock: unknown.",
+    "feeding": [
+      {
+        "stage": "adult",
+        "intervalDays": {
+          "min": 2.0,
+          "max": 3.0
+        },
+        "notes": "Mock value."
+      }
+    ],
+    "droppings": {
+      "intervalDays": {
+        "min": 1.0,
+        "max": 3.0
+      },
+      "notes": "Mock value."
+    },
+    "shedding": {
+      "type": "patches",
+      "intervalDays": {
+        "min": 30.0,
+        "max": 45.0
+      },
+      "signs": "Mock value."
+    },
+    "observableActivities": [
+      "basking",
+      "hiding",
+      "exploring"
+    ],
+    "trackedStats": [
+      {
+        "id": "shed",
+        "label": "Shed (Mock)",
+        "question": "Mock check: is the animal shedding?",
+        "options": [
+          "not shedding",
+          "about to shed",
+          "shedding",
+          "stuck shed",
+          "can't see animal"
+        ],
+        "concernOptions": [
+          "stuck shed"
+        ]
+      }
+    ],
+    "bodyCondition": {
+      "healthy": "Mock value.",
+      "underweight": "Mock value.",
+      "overweight": "Mock value."
+    },
+    "conditions": [
+      {
+        "name": "Example condition (Mock)",
+        "visibleSigns": [
+          "mock sign"
+        ],
+        "urgency": "monitor",
+        "notes": "Mock value."
+      }
+    ],
+    "sexNotes": {
+      "howToTell": "Mock value.",
+      "male": {
+        "notes": "Mock value.",
+        "conditions": []
+      },
+      "female": {
+        "notes": "Mock value.",
+        "conditions": [
+          {
+            "name": "Egg binding (Mock)",
+            "visibleSigns": [
+              "mock sign"
+            ],
+            "urgency": "vet soon",
+            "notes": "Mock value."
+          }
+        ]
+      }
+    },
+    "hazards": [
+      {
+        "name": "Example hazard (Mock)",
+        "description": "Mock value."
+      }
+    ],
+    "husbandryNotes": "Mock value.",
+    "confidence": "None: this is a Mock placeholder."
+  },
+  "images": [],
+  "notes": [
+    "Couldn't reach Wikimedia Commons for photos; the profile was saved without them."
+  ],
+  "tokens": null
+}

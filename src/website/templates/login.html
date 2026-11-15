@@ -11,23 +11,94 @@
 <meta name="apple-mobile-web-app-title" content="RepTracker">
 <title>RepTracker · {{ "Create the account" if setup else "Sign in" }}</title>
 <style>
-  :root { --bg: #f4f5f0; --surface: #fff; --border: #dcdfd4; --text: #1d221b; --muted: #61695c; --accent: #3f7d3a; --accent-ink: #fff; --bad: #b3261e; --warn-bg: #fbefd6; --warn: #9a6200; }
+  :root { 
+    --bg: #faf7f2; 
+    --bg-grad: linear-gradient(135deg, #fdfcfb 0%, #f6f1eb 100%);
+    --surface: rgba(255, 255, 255, 0.85); 
+    --border: rgba(255, 255, 255, 0.6); 
+    --border-solid: #e8dfd5;
+    --text: #4a433e; 
+    --muted: #9c9288; 
+    --accent: #e29578; /* Soft terracotta/peach from palette */
+    --accent-grad: linear-gradient(135deg, #ffcbb5 0%, #e29578 100%);
+    --accent-ink: #fff; 
+    --bad: #c97c77; 
+    --warn-bg: #fcf1e3; 
+    --warn: #d99a5b;
+    --shadow: 0 8px 32px rgba(170, 160, 150, 0.12), 0 2px 8px rgba(170, 160, 150, 0.04);
+  }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #121510; --surface: #1a1e18; --border: #30362d; --text: #e7eae3; --muted: #9aa294; --accent: #7cc173; --accent-ink: #0f1a0d; --bad: #f2948b; --warn-bg: #3a2f17; --warn: #f0c063; }
+    :root { 
+      --bg: #1c1a19; 
+      --bg-grad: linear-gradient(135deg, #1c1a19 0%, #262321 100%);
+      --surface: rgba(43, 39, 37, 0.85); 
+      --border: rgba(255, 255, 255, 0.05); 
+      --border-solid: #3d3733;
+      --text: #e8e4df; 
+      --muted: #a39c96; 
+      --bad: #f2948b; 
+      --warn-bg: #3a2f17; 
+      --warn: #f0c063;
+      --shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+    }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 16px; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width: min(380px, 100%); display: grid; gap: 14px; }
-  .brand { display: flex; align-items: center; gap: 8px; font-size: 22px; font-weight: 800; letter-spacing: -.02em; margin: 0; }
-  .brand span { color: var(--accent); } .brand svg { width: 32px; height: 32px; color: var(--accent); transform: rotate(-18deg); }
-  h1 { font-size: 17px; margin: 0; }
-  label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 4px; }
-  input { width: 100%; font: inherit; font-size: 16px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; }
-  input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  button { font: inherit; font-weight: 600; cursor: pointer; border-radius: 8px; padding: 10px 14px; min-height: 44px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); }
-  .hint { color: var(--muted); font-size: 13px; margin: 0; }
-  .error { color: var(--bad); font-weight: 600; margin: 0; }
-  .note { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 8px 10px; font-size: 13px; margin: 0; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg-grad); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 16px; }
+  
+  .card { 
+    background: var(--surface); 
+    border: 1px solid var(--border); 
+    border-radius: 28px; 
+    padding: 40px 32px; 
+    width: min(400px, 100%); 
+    display: grid; 
+    gap: 20px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+  
+  .brand { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 26px; font-weight: 800; letter-spacing: -.02em; margin: 0 0 8px 0; }
+  .brand span { color: var(--accent); } 
+  .brand svg { width: 36px; height: 36px; color: var(--accent); transform: rotate(-18deg); filter: drop-shadow(0 4px 6px rgba(226, 149, 120, 0.3)); }
+  
+  h1 { font-size: 18px; margin: 0; text-align: center; color: var(--muted); font-weight: 500;}
+  label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 8px; color: var(--text); }
+  
+  input { 
+    width: 100%; 
+    font: inherit; 
+    font-size: 16px; 
+    color: var(--text); 
+    background: rgba(232, 223, 213, 0.3); 
+    border: 1px solid transparent; 
+    border-radius: 16px; 
+    padding: 14px 16px; 
+    transition: all 0.3s ease;
+  }
+  input:focus-visible { outline: none; background: var(--surface); border-color: var(--accent); box-shadow: 0 0 0 4px rgba(226, 149, 120, 0.2); }
+  
+  button { 
+    font: inherit; 
+    font-size: 16px;
+    font-weight: 600; 
+    cursor: pointer; 
+    border-radius: 999px; 
+    padding: 14px 24px; 
+    margin-top: 8px;
+    min-height: 48px; 
+    border: none; 
+    background: var(--accent-grad); 
+    color: var(--accent-ink); 
+    box-shadow: 0 6px 16px rgba(226, 149, 120, 0.3);
+    transition: all 0.3s ease;
+  }
+  button:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(226, 149, 120, 0.4); }
+  button:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(226, 149, 120, 0.3), 0 8px 24px rgba(226, 149, 120, 0.4); }
+  
+  .hint { color: var(--muted); font-size: 13px; margin: 0; line-height: 1.6; text-align: center; }
+  .error { color: var(--bad); font-weight: 600; margin: 0; text-align: center; background: var(--warn-bg); padding: 12px; border-radius: 12px;}
+  .note { background: var(--warn-bg); color: var(--warn); border-radius: 12px; padding: 12px 16px; font-size: 13px; margin: 0; text-align: center; }
 </style>
 <script>
 // The service worker makes RepTracker installable (D9). Browsers only allow it on a connection they trust:
