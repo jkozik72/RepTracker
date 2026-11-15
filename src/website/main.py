@@ -936,10 +936,10 @@ def CreateProfile(species, regenerate=False):
                               "Open it, or Regenerate it to replace it.")
     if existing:
         species = existing["species"]
-    schemaText = (PROMPTS / "profile-schema.json").read_text(encoding="utf-8")
-    prompt = FillTemplate("research.txt", {"species": species, "profile_schema": schemaText})
+    schema = research.RequestSchema()   # a simpler shape than the stored one; NormalizeProfile converts the reply
+    prompt = FillTemplate("research.txt", {"species": species, "profile_schema": json.dumps(schema, indent=2)})
     provider = CurrentProvider()
-    raw, details = RESEARCHERS[provider](prompt, json.loads(schemaText))
+    raw, details = RESEARCHERS[provider](prompt, schema)
     profile, notes = _ResearchCall(research.NormalizeProfile, raw)
     record = _ResearchCall(research.NewRecord, species, profile, provider, details.get("model"))
     if existing:
