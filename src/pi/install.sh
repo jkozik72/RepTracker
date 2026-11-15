@@ -219,6 +219,10 @@ touch "$HOME_DIR/task.log"; chown root:"$NAME" "$HOME_DIR/task.log"; chmod 644 "
 done_line "reptracker-admin and its sudo rule"
 
 step "The computer's name"
+# Ubuntu's cloud-init sets the hostname back at every boot unless told to keep it.
+if [ "$KEEP_HOSTNAME" = 0 ] && [ -d /etc/cloud/cloud.cfg.d ]; then
+  echo "preserve_hostname: true" > /etc/cloud/cloud.cfg.d/99-reptracker-hostname.cfg
+fi
 if [ "$KEEP_HOSTNAME" = 0 ] && [ "$(hostname)" != "$NAME" ]; then
   OLD=$(hostname)
   if command -v hostnamectl >/dev/null && [ "$HAS_SYSTEMD" = 1 ]; then hostnamectl set-hostname "$NAME"; else echo "$NAME" > /etc/hostname; hostname "$NAME" 2>/dev/null || true; fi
