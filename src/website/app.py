@@ -134,17 +134,28 @@ def system_action(action):
 
 # ---------- open on a phone: this server's addresses on the network, and a QR code ----------
 
-def PhoneLinks():
-    """The addresses a phone on the same network can open: IP addresses first (Android often can't look up
-    .local names), then name.local. Empty when the server only listens on this computer (no --lan)."""
+def PhoneLinks(current=None):
+    """The addresses a phone on the same network can open, best first: the address this page was opened with
+    (it already works from this network), the one the server's traffic goes out on, other addresses, then
+    name.local (Android often can't look up .local names). Empty when the server only listens on this computer."""
     port = app.config.get("LAN_PORT")
     if not port:
         return {"lan": False, "links": []}
     suffix = "" if port == 443 else f":{port}"
-    links = [{"url": f"https://{a}{suffix}", "label": a + (" (Tailscale)" if a.startswith("100.") else "")}
-             for a in sorted(auth.LanAddresses(), key=lambda a: a.startswith("100."))]
-    links += [{"url": f"https://{n}{suffix}", "label": f"{n} (not on every Android phone)"} for n in auth.HostNames() if n.endswith(".local")]
-    return {"lan": True, "links": links, "fingerprint": auth.AuthorityCertificate()[1]}
+    addresses = [a for a in auth.LanAddresses() if not a.startswith("100.")] + [a for a in auth.LanAddresses() if a.startswith("100.")]
+    names = [n for n in auth.HostNames() if n.endswith(".local")]
+    host = (current or "").rsplit(":", 1)[0].strip("[]").lower() if current and not current.startswith("[") else ""
+    links = []
+    if host and host not in ("localhost", "127.0.0.1") and (host in addresses or host in names):
+        links.append({"url": f"https://{host}{suffix}", "label": f"{host} (the address open here)"})
+    for a in addresses:
+        links.append({"url": f"https://{a}{suffix}", "label": a + (" (Tailscale)" if a.startswith("100.") else "")})
+    links += [{"url": f"https://{n}{suffix}", "label": f"{n} (not on every Android phone)"} for n in names]
+    seen, unique = set(), []
+    for l in links:
+        if l["url"] not in seen:
+            seen.add(l["url"]); unique.append(l)
+    return {"lan": True, "links": unique, "fingerprint": auth.AuthorityCertificate()[1]}
 
 
 # ---------- automatic analyses and phone alerts (D10) ----------
@@ -209,7 +220,7 @@ def authority_certificate():
 
 @app.get("/api/phone")
 def phone_links():
-    return jsonify(PhoneLinks())
+    return jsonify(PhoneLinks(request.host))
 
 
 @app.get("/api/phone/qr.svg")
@@ -217,7 +228,7 @@ def phone_qr():
     import io
     import segno
     url = request.args.get("url", "")
-    if url not in [l["url"] for l in PhoneLinks()["links"]]:
+    if url not in [l["url"] for l in PhoneLinks(request.host)["links"]]:
         return jsonify({"error": "Not one of this server's addresses."}), 404
     out = io.BytesIO()
     segno.make(url, error="m").save(out, kind="svg", scale=6, border=2, dark="#000", light="#fff", xmldecl=False)

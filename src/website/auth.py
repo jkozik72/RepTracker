@@ -16,6 +16,7 @@ import json
 import os
 import secrets
 import socket
+import sys
 import threading
 import time
 from pathlib import Path
@@ -105,20 +106,37 @@ def SecretKey():
 
 
 def LanAddresses():
-    """This computer's IPv4 addresses on the local network (best effort)."""
-    found = set()
+    """This computer's IPv4 addresses on the local network, best first: the one its network traffic goes out on
+    (the home Wi-Fi or Ethernet), then any others (VPN, Docker...). No loopback or link-local addresses."""
+    first, others = [], []
+    for target in ("192.0.2.1", "10.255.255.255"):   # the address used to reach a network; nothing is sent
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect((target, 9))
+                first.append(s.getsockname()[0])
+                break
+        except OSError:
+            continue
     try:
-        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            found.add(info[4][0])
+        others += [info[4][0] for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)]
     except OSError:
         pass
-    try:   # the address used for outgoing traffic; nothing is sent
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.connect(("192.0.2.1", 9))
-            found.add(s.getsockname()[0])
-    except OSError:
-        pass
-    return sorted(a for a in found if not a.startswith("127."))
+    if sys.platform.startswith("linux"):   # the Pi: every address, as the installer prints them (the hostname often only gives 127.0.1.1)
+        import subprocess
+        try:
+            others += subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=3).stdout.split()
+        except (OSError, subprocess.SubprocessError):
+            pass
+    out = []
+    for a in first + others:
+        try:
+            ip = ipaddress.ip_address(a)
+        except ValueError:
+            continue
+        if ip.version != 4 or ip.is_loopback or ip.is_link_local or ip.is_unspecified or a in out:
+            continue
+        out.append(a)
+    return out
 
 
 def HostNames():
