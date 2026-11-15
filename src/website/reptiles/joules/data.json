@@ -1,22 +1,291 @@
 {
-    "Weight":  "healthy", 
-    "Shed": "not shedding",
-    "Food in bowl": "no bowl visible",
-    "Current activity": "Basking",
-    "Temperature cool side": 75, 
-    "Temperature warm side": 90,
-    "Humidity cool side": 30,
-    "Humidity warm side": 25,
-    "Movement Data" : [[0,3], [1,10.5], [2, 14], [3, 15], [4, 15], [5, 15], [6, 14]],
-    "Hazardous conditions": 
+    "November 12": [
         {
-            "Improper substrate" : false,
-            "Unsafe lighting" : false,
-            "Temperature too high" : false,
-            "Temperature too low" : false,
-            "Humidity too high" : false,
-            "Signs of disease" : "none",
-            "Other" : "none"
+            "Time" : 3,
+            "Weight":  "healthy", 
+            "Shed": "not shedding",
+            "Food in bowl": "no bowl visible",
+            "Current activity": "Basking",
+            "Temperature cool side": 75, 
+            "Temperature warm side": 90,
+            "Humidity cool side": 30,
+            "Humidity warm side": 25,
+            "Movement Data" : [[0,3], [1,10.5], [2, 14], [3, 15], [4, 15], [5, 15], [6, 14]],
+            "Hazardous conditions": 
+                {
+                    "Improper substrate" : false,
+                    "Unsafe lighting" : false,
+                    "Temperature too high" : false,
+                    "Temperature too low" : false,
+                    "Humidity too high" : false,
+                    "Signs of disease" : "none",
+                    "Other" : "none"
+                }
+        },
+        {
+            "Time" : 4,
+            "Weight":  "healthy", 
+            "Shed": "not shedding",
+            "Food in bowl": "no bowl visible",
+            "Current activity": "Basking",
+            "Temperature cool side": 75, 
+            "Temperature warm side": 90,
+            "Humidity cool side": 30,
+            "Humidity warm side": 25,
+            "Movement Data" : [[0,3], [1,10.5], [2, 14], [3, 15], [4, 15], [5, 15], [6, 14]],
+            "Hazardous conditions": 
+                {
+                    "Improper substrate" : false,
+                    "Unsafe lighting" : false,
+                    "Temperature too high" : false,
+                    "Temperature too low" : false,
+                    "Humidity too high" : false,
+                    "Signs of disease" : "none",
+                    "Other" : "none"
+                }
+
+        },
+        {
+            "Time" : 5,
+            "Weight":  "healthy", 
+            "Shed": "not shedding",
+            "Food in bowl": "no bowl visible",
+            "Current activity": "Basking",
+            "Temperature cool side": 75, 
+            "Temperature warm side": 90,
+            "Humidity cool side": 30,
+            "Humidity warm side": 25,
+            "Movement Data" : [[0,3], [1,10.5], [2, 14], [3, 15], [4, 15], [5, 15], [6, 14]],
+            "Hazardous conditions": 
+                {
+                    "Improper substrate" : false,
+                    "Unsafe lighting" : false,
+                    "Temperature too high" : false,
+                    "Temperature too low" : false,
+                    "Humidity too high" : false,
+                    "Signs of disease" : "none",
+                    "Other" : "none"
+                }
+
+        },
+        {
+            "Time" : 6,
+            "Weight":  "healthy", 
+            "Shed": "not shedding",
+            "Food in bowl": "no bowl visible",
+            "Current activity": "Basking",
+            "Temperature cool side": 75, 
+            "Temperature warm side": 90,
+            "Humidity cool side": 30,
+            "Humidity warm side": 25,
+            "Movement Data" : [[0,3], [1,10.5], [2, 14], [3, 15], [4, 15], [5, 15], [6, 14]],
+            "Hazardous conditions": 
+                {
+                    "Improper substrate" : false,
+                    "Unsafe lighting" : false,
+                    "Temperature too high" : false,
+                    "Temperature too low" : false,
+                    "Humidity too high" : false,
+                    "Signs of disease" : "none",
+                    "Other" : "none"
+                }
+
         }
+        
+
+    ],
+    "November 13": [
+        {
+            "Time" : 3,
+            "Weight":  "healthy", 
+            "Shed": "not shedding",
+            "Food in bowl": "no bowl visible",
+            "Current activity": "Basking",
+            "Temperature cool side": 75, 
+            "Temperature warm side": 90,
+            "Humidity cool side": 30,
+            "Humidity warm side": 25,
+            "Movement Data" : [[0,3], [1,10.5], [2, 14], [3, 15], [4, 15], [5, 15], [6, 14]],
+            "Hazardous conditions": 
+                {
+                    "Improper substrate" : false,
+                    "Unsafe lighting" : false,
+                    "Temperature too high" : false,
+                    "Temperature too low" : false,
+                    "Humidity too high" : false,
+                    "Signs of disease" : "none",
+                    "Other" : "none"
+                }
+
+        },
+        {
+            "Time" : 4,
+            "Weight":  "healthy", 
+            "Shed": "not shedding",
+            "Food in bowl": "no bowl visible",
+            "Current activity": "Basking",
+            "Temperature cool side": 75, 
+            "Temperature warm side": 90,
+            "Humidity cool side": 30,
+            "Humidity warm side": 25,
+            "Movement Data" : [[0,3], [1,10.5], [2, 14], [3, 15], [4, 15], [5, 15], [6, 14]],
+            "Hazardous conditions": 
+                {
+                    "Improper substrate" : false,
+                    "Unsafe lighting" : false,
+                    "Temperature too high" : false,
+                    "Temperature too low" : false,
+                    "Humidity too high" : false,
+                    "Signs of disease" : "none",
+                    "Other" : "none"
+                }
+
+        },
+        {
+            "Time" : 5,
+            "Weight":  "healthy", 
+            "Shed": "not shedding",
+            "Food in bowl": "no bowl visible",
+            "Current activity": "Basking",
+            "Temperature cool side": 75, 
+            "Temperature warm side": 90,
+            "Humidity cool side": 30,
+            "Humidity warm side": 25,
+            "Movement Data" : [[0,3], [1,10.5], [2, 14], [3, 15], [4, 15], [5, 15], [6, 14]],
+            "Hazardous conditions": 
+                {
+                    "Improper substrate" : false,
+                    "Unsafe lighting" : false,
+                    "Temperature too high" : false,
+                    "Temperature too low" : false,
+                    "Humidity too high" : false,
+                    "Signs of disease" : "none",
+                    "Other" : "none"
+                }
+
+        },
+        {
+            "Time" : 6,
+            "Weight":  "healthy", 
+            "Shed": "not shedding",
+            "Food in bowl": "no bowl visible",
+            "Current activity": "Basking",
+            "Temperature cool side": 75, 
+            "Temperature warm side": 90,
+            "Humidity cool side": 30,
+            "Humidity warm side": 25,
+            "Movement Data" : [[0,3], [1,10.5], [2, 14], [3, 15], [4, 15], [5, 15], [6, 14]],
+            "Hazardous conditions": 
+                {
+                    "Improper substrate" : false,
+                    "Unsafe lighting" : false,
+                    "Temperature too high" : false,
+                    "Temperature too low" : false,
+                    "Humidity too high" : false,
+                    "Signs of disease" : "none",
+                    "Other" : "none"
+                }
+
+        }
+        
+
+    ],
+    
+    "November 14": [
+        {
+            "Time" : 3,
+            "Weight":  "healthy", 
+            "Shed": "not shedding",
+            "Food in bowl": "no bowl visible",
+            "Current activity": "Basking",
+            "Temperature cool side": 75, 
+            "Temperature warm side": 90,
+            "Humidity cool side": 30,
+            "Humidity warm side": 25,
+            "Movement Data" : [[0,3], [1,10.5], [2, 14], [3, 15], [4, 15], [5, 15], [6, 14]],
+            "Hazardous conditions": 
+                {
+                    "Improper substrate" : false,
+                    "Unsafe lighting" : false,
+                    "Temperature too high" : false,
+                    "Temperature too low" : false,
+                    "Humidity too high" : false,
+                    "Signs of disease" : "none",
+                    "Other" : "none"
+                }
+
+        },
+        {
+            "Time" : 4,
+            "Weight":  "healthy", 
+            "Shed": "not shedding",
+            "Food in bowl": "no bowl visible",
+            "Current activity": "Basking",
+            "Temperature cool side": 75, 
+            "Temperature warm side": 90,
+            "Humidity cool side": 30,
+            "Humidity warm side": 25,
+            "Movement Data" : [[0,3], [1,10.5], [2, 14], [3, 15], [4, 15], [5, 15], [6, 14]],
+            "Hazardous conditions": 
+                {
+                    "Improper substrate" : false,
+                    "Unsafe lighting" : false,
+                    "Temperature too high" : false,
+                    "Temperature too low" : false,
+                    "Humidity too high" : false,
+                    "Signs of disease" : "none",
+                    "Other" : "none"
+                }
+
+        },
+        {
+            "Time" : 5,
+            "Weight":  "healthy", 
+            "Shed": "not shedding",
+            "Food in bowl": "no bowl visible",
+            "Current activity": "Basking",
+            "Temperature cool side": 75, 
+            "Temperature warm side": 90,
+            "Humidity cool side": 30,
+            "Humidity warm side": 25,
+            "Movement Data" : [[0,3], [1,10.5], [2, 14], [3, 15], [4, 15], [5, 15], [6, 14]],
+            "Hazardous conditions": 
+                {
+                    "Improper substrate" : false,
+                    "Unsafe lighting" : false,
+                    "Temperature too high" : false,
+                    "Temperature too low" : false,
+                    "Humidity too high" : false,
+                    "Signs of disease" : "none",
+                    "Other" : "none"
+                }
+
+        },
+        {
+            "Time" : 6,
+            "Weight":  "healthy", 
+            "Shed": "not shedding",
+            "Food in bowl": "no bowl visible",
+            "Current activity": "Basking",
+            "Temperature cool side": 75, 
+            "Temperature warm side": 90,
+            "Humidity cool side": 30,
+            "Humidity warm side": 25,
+            "Movement Data" : [[0,3], [1,10.5], [2, 14], [3, 15], [4, 15], [5, 15], [6, 14]],
+            "Hazardous conditions": 
+                {
+                    "Improper substrate" : false,
+                    "Unsafe lighting" : false,
+                    "Temperature too high" : false,
+                    "Temperature too low" : false,
+                    "Humidity too high" : false,
+                    "Signs of disease" : "none",
+                    "Other" : "none"
+                }
+
+        }
+        
+
+    ]
 
 }

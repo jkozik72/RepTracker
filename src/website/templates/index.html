@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RepTracker</title>
+<style>
+  :root {
+    --bg: #f4f5f0;
+    --surface: #ffffff;
+    --surface-2: #eef0e9;
+    --border: #dcdfd4;
+    --text: #1d221b;
+    --muted: #61695c;
+    --accent: #3f7d3a;
+    --accent-ink: #ffffff;
+    --ok: #2f7a35;
+    --ok-bg: #e3f1e1;
+    --warn: #9a6200;
+    --warn-bg: #fbefd6;
+    --bad: #b3261e;
+    --bad-bg: #fbe3e0;
+    --line: #3f7d3a;
+    --grid: #e4e7de;
+    --radius: 12px;
+    --shadow: 0 1px 2px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121510;
+      --surface: #1a1e18;
+      --surface-2: #232821;
+      --border: #30362d;
+      --text: #e7eae3;
+      --muted: #9aa294;
+      --accent: #7cc173;
+      --accent-ink: #0f1a0d;
+      --ok: #8fd486;
+      --ok-bg: #1f3320;
+      --warn: #f0c063;
+      --warn-bg: #3a2f17;
+      --bad: #f2948b;
+      --bad-bg: #3d1f1c;
+      --line: #7cc173;
+      --grid: #2a3027;
+      --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+
+  /* Header + tabs */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 5;
+  }
+  .header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 14px; }
+  .brand { font-size: 22px; font-weight: 700; letter-spacing: -.01em; margin: 0; }
+  .brand span { color: var(--accent); }
+  nav[role="tablist"] { display: flex; gap: 4px; margin-top: 10px; }
+  .tab {
+    appearance: none; border: 0; background: none; color: var(--muted);
+    font: inherit; font-weight: 600; padding: 8px 14px; cursor: pointer;
+    border-bottom: 2px solid transparent;
+  }
+  .tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+  .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  main { padding: 20px 0 48px; }
+  [hidden] { display: none !important; }
+
+  /* Generic */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+  }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+  .btn {
+    appearance: none; font: inherit; font-weight: 600; cursor: pointer;
+    border-radius: 8px; padding: 8px 14px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text);
+  }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.ghost { background: none; border-color: transparent; color: var(--muted); padding: 6px 10px; }
+  .btn:hover { filter: brightness(.97); }
+  .btn:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+  input, select, textarea {
+    width: 100%; font: inherit; color: var(--text); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+  }
+  .hint { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+    padding: 2px 9px; border-radius: 999px; white-space: nowrap;
+  }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); }
+  .pill.warn { background: var(--warn-bg); color: var(--warn); }
+  .pill.bad { background: var(--bad-bg); color: var(--bad); }
+  .pill.none { background: var(--surface-2); color: var(--muted); }
+
+  /* Summary */
+  .summary { padding: 14px 16px; margin-bottom: 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+  .summary-count { font-weight: 700; }
+  .summary-list { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0; padding: 0; }
+  .summary-list a { text-decoration: none; }
+  .summary-alerts { flex-basis: 100%; margin: 0; padding: 0; list-style: none; font-size: 14px; }
+  .summary-alerts li { color: var(--bad); }
+  .summary-alerts li::before { content: "▲ "; font-size: 10px; vertical-align: 2px; }
+
+  /* Lizard block */
+  .lizards { display: grid; gap: 20px; }
+  .lizard { padding: 16px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+  .lizard-head { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .lizard-name { font-size: 20px; font-weight: 700; margin: 0; }
+  .lizard-species { color: var(--muted); font-size: 14px; margin-left: 8px; font-weight: 500; }
+  .video {
+    aspect-ratio: 16 / 9; background: #0d0f0c; border-radius: 10px; overflow: hidden;
+    display: grid; place-items: center; color: #9aa294; font-size: 14px; position: relative;
+  }
+  .video video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .video .live { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,.6); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; letter-spacing: .05em; }
+  .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-content: start; margin: 0; }
+  .stat { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+  .stat dt { font-size: 12px; color: var(--muted); }
+  .stat dd { margin: 0; font-weight: 600; text-transform: capitalize; }
+  .stat.flag dd { color: var(--bad); }
+  .panel { background: var(--surface-2); border-radius: 10px; padding: 12px 14px; }
+  .analysis p { margin: 0 0 6px; }
+  .analysis ul { margin: 6px 0 0; padding-left: 18px; }
+  .ask form { display: flex; gap: 8px; }
+  .ask input { flex: 1; }
+  .chat { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; max-height: 180px; overflow-y: auto; font-size: 14px; }
+  .chat .q { font-weight: 600; }
+  .chat .a { color: var(--muted); }
+  .graph { grid-column: 1 / -1; }
+  .graph svg { width: 100%; height: auto; display: block; }
+  .graph text { fill: var(--muted); font-size: 11px; }
+
+  /* Add lizard */
+  .add-row { margin-top: 20px; }
+  .add-btn {
+    width: 100%; padding: 18px; border: 2px dashed var(--border); background: none;
+    border-radius: var(--radius); color: var(--muted); font: inherit; font-weight: 600; cursor: pointer;
+  }
+  .add-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .add-form { padding: 16px; display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .add-form .full { grid-column: 1 / -1; }
+  .form-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .empty { padding: 28px 16px; text-align: center; color: var(--muted); }
+
+  /* Settings */
+  .settings { padding: 18px; max-width: 560px; display: grid; gap: 14px; }
+  .key-row { display: flex; gap: 8px; }
+  .key-row input { flex: 1; }
+  .saved { color: var(--ok); font-size: 13px; font-weight: 600; }
+
+  @media (max-width: 720px) {
+    .lizard, .add-form { grid-template-columns: minmax(0, 1fr); }
+    .ask form { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="header-row">
+      <h1 class="brand">Rep<span>Tracker</span></h1>
+    </div>
+    <nav role="tablist" aria-label="Sections">
+      <button class="tab" role="tab" id="tab-dashboard" aria-controls="view-dashboard" aria-selected="true">Dashboard</button>
+      <button class="tab" role="tab" id="tab-settings" aria-controls="view-settings" aria-selected="false" tabindex="-1">Settings</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- Dashboard -->
+  <section id="view-dashboard" role="tabpanel" aria-labelledby="tab-dashboard">
+    <div class="card summary" id="summary" aria-live="polite"></div>
+
+    <div class="lizards" id="lizards"></div>
+
+    <div class="add-row">
+      <button class="add-btn" id="add-btn" type="button">+ Add lizard</button>
+      <form class="card add-form" id="add-form" hidden>
+        <div>
+          <label for="f-name">Name</label>
+          <input id="f-name" name="name" required maxlength="40" placeholder="e.g. Cheeto">
+        </div>
+        <div>
+          <label for="f-species">Species</label>
+          <select id="f-species" name="species" required>
+            <option value="leopard gecko">Leopard gecko</option>
+            <option value="skink">Skink</option>
+          </select>
+        </div>
+        <div class="full">
+          <label for="f-video">Video feed URL</label>
+          <input id="f-video" name="video" type="url" placeholder="https://… (camera stream or clip)">
+          <p class="hint">Or choose a video file below. Leave both empty to add the feed later.</p>
+        </div>
+        <div class="full">
+          <label for="f-file">Video file</label>
+          <input id="f-file" name="file" type="file" accept="video/*">
+        </div>
+        <div class="full">
+          <label for="f-notes">Notes</label>
+          <textarea id="f-notes" name="notes" rows="2" placeholder="Age, enclosure, anything the AI should know"></textarea>
+        </div>
+        <div class="full form-actions">
+          <button class="btn" type="button" id="add-cancel">Cancel</button>
+          <button class="btn primary" type="submit">Create lizard</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- Settings -->
+  <section id="view-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+    <form class="card settings" id="settings-form">
+      <div>
+        <h2>AI</h2>
+        <label for="api-key">API key</label>
+        <div class="key-row">
+          <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your API key">
+          <button class="btn" type="button" id="key-toggle" aria-pressed="false">Show</button>
+        </div>
+        <p class="hint">Used for the AI analysis and questions. Stored only in this browser.</p>
+      </div>
+      <div class="form-actions" style="justify-content:flex-start;align-items:center">
+        <button class="btn primary" type="submit">Save</button>
+        <button class="btn" type="button" id="key-clear">Clear</button>
+        <span class="saved" id="key-saved" hidden>Saved</span>
+      </div>
+    </form>
+  </section>
+</main>
+
+<script>
+/* ---------- Data ---------- */
+// Sample lizards, matching the shape of reptiles/<name>/data.json.
+const SAMPLE_LIZARDS = [
+  {
+    id: "cheeto", name: "Cheeto", species: "leopard gecko", video: "", notes: "",
+    data: {
+      "Weight": "healthy", "Shed": "not shedding", "Food in bowl": "no bowl visible",
+      "Current activity": "Basking",
+      "Temperature cool side": 75, "Temperature warm side": 90,
+      "Humidity cool side": 30, "Humidity warm side": 25,
+      "Movement Data": [[0,3],[1,10.5],[2,14],[3,15],[4,15],[5,15],[6,14]],
+      "Hazardous conditions": {
+        "Improper substrate": false, "Unsafe lighting": false,
+        "Temperature too high": false, "Temperature too low": false,
+        "Humidity too high": false, "Signs of disease": "none", "Other": "none"
+      }
+    }
+  },
+  {
+    id: "joules", name: "Joules", species: "skink", video: "", notes: "",
+    data: {
+      "Weight": "healthy", "Shed": "not shedding", "Food in bowl": "no bowl visible",
+      "Current activity": "Basking",
+      "Temperature cool side": 75, "Temperature warm side": 90,
+      "Humidity cool side": 30, "Humidity warm side": 25,
+      "Movement Data": [[0,3],[1,10.5],[2,14],[3,15],[4,15],[5,15],[6,14]],
+      "Hazardous conditions": {
+        "Improper substrate": false, "Unsafe lighting": false,
+        "Temperature too high": false, "Temperature too low": false,
+        "Humidity too high": false, "Signs of disease": "none", "Other": "none"
+      }
+    }
+  }
+];
+
+const STORE_LIZARDS = "reptracker.lizards";
+const STORE_KEY = "reptracker.apiKey";
+const objectUrls = {}; // id -> blob URL for videos picked from disk (not persisted)
+
+function loadStored(key, fallback) {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+  catch { return fallback; }
+}
+function saveStored(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+
+let lizards = loadStored(STORE_LIZARDS, SAMPLE_LIZARDS);
+
+/* ---------- Helpers ---------- */
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+// Returns a list of alert strings for one lizard's data.
+function getAlerts(data) {
+  if (!data) return [];
+  const alerts = [];
+  const hz = data["Hazardous conditions"] || {};
+  for (const [k, v] of Object.entries(hz)) {
+    if (v === true) alerts.push(k);
+    else if (typeof v === "string" && v.toLowerCase() !== "none" && v.trim() !== "") alerts.push(`${k}: ${v}`);
+  }
+  const w = (data["Weight"] || "").toLowerCase();
+  if (w && w !== "healthy" && !w.includes("see")) alerts.push(`Weight: ${w}`);
+  return alerts;
+}
+
+// ok | warn | bad | none
+function getStatus(lizard) {
+  if (!lizard.data) return "none";
+  const alerts = getAlerts(lizard.data);
+  if (alerts.length) return "bad";
+  const shed = (lizard.data["Shed"] || "").toLowerCase();
+  if (shed === "now" || shed === "soon") return "warn";
+  return "ok";
+}
+const STATUS_LABEL = { ok: "Healthy", warn: "Watch", bad: "Alert", none: "No data yet" };
+
+/* ---------- Summary ---------- */
+function renderSummary() {
+  const el = document.getElementById("summary");
+  if (!lizards.length) { el.innerHTML = `<span class="summary-count">No lizards yet</span><span class="hint" style="margin:0">Add one below to start tracking.</span>`; return; }
+  const allAlerts = lizards.flatMap(l => getAlerts(l.data).map(a => `${l.name}: ${a}`));
+  const nAlerts = allAlerts.length;
+  el.innerHTML = `
+    <span class="summary-count">${lizards.length} lizard${lizards.length === 1 ? "" : "s"} · ${nAlerts ? `<span style="color:var(--bad)">${nAlerts} alert${nAlerts === 1 ? "" : "s"}</span>` : "no alerts"}</span>
+    <ul class="summary-list">
+      ${lizards.map(l => { const s = getStatus(l); return `<li><a href="#lizard-${l.id}"><span class="pill ${s}">${escapeHtml(l.name)} · ${STATUS_LABEL[s]}</span></a></li>`; }).join("")}
+    </ul>
+    ${nAlerts ? `<ul class="summary-alerts">${allAlerts.map(a => `<li>${escapeHtml(a)}</li>`).join("")}</ul>` : ""}`;
+}
+
+/* ---------- Lizard blocks ---------- */
+const STAT_FIELDS = [
+  ["Current activity", ""], ["Weight", ""], ["Shed", ""], ["Food in bowl", ""],
+  ["Temperature warm side", " °F"], ["Temperature cool side", " °F"],
+  ["Humidity warm side", " %"], ["Humidity cool side", " %"]
+];
+
+function renderStats(data) {
+  return STAT_FIELDS.map(([k, unit]) => {
+    const v = data && data[k] != null && data[k] !== "" ? `${data[k]}${unit}` : "—";
+    return `<div class="stat"><dt>${k}</dt><dd>${escapeHtml(v)}</dd></div>`;
+  }).join("");
+}
+
+// Plain-language summary built from the latest data. Replace with the model's text once the backend returns it.
+function renderAnalysis(lizard) {
+  const d = lizard.data;
+  if (!d) return `<p>Waiting for the first analysis. Once the camera has captured images, the AI will fill in this lizard's stats.</p>`;
+  const alerts = getAlerts(d);
+  const parts = [];
+  parts.push(`${escapeHtml(lizard.name)} is currently <strong>${escapeHtml(String(d["Current activity"] || "unknown").toLowerCase())}</strong> and looks <strong>${escapeHtml(d["Weight"] || "unknown")}</strong>.`);
+  if (d["Temperature warm side"] != null) parts.push(`Warm side ${d["Temperature warm side"]} °F, cool side ${d["Temperature cool side"]} °F.`);
+  const shed = d["Shed"];
+  if (shed && shed !== "not shedding") parts.push(`Shed: ${escapeHtml(shed)}.`);
+  let html = `<p>${parts.join(" ")}</p>`;
+  html += alerts.length
+    ? `<p style="color:var(--bad);font-weight:600">Needs attention:</p><ul>${alerts.map(a => `<li>${escapeHtml(a)}</li>`).join("")}</ul>`
+    : `<p style="color:var(--ok);font-weight:600">No hazards detected.</p>`;
+  return html;
+}
+
+function renderVideo(lizard) {
+  const src = objectUrls[lizard.id] || lizard.video;
+  if (!src) return `<div class="video">No video feed connected</div>`;
+  return `<div class="video"><video src="${escapeHtml(src)}" autoplay muted loop playsinline controls></video><span class="live">FEED</span></div>`;
+}
+
+// Line chart of [minute, position] pairs.
+function renderGraph(points) {
+  if (!points || points.length < 2) return `<p class="hint" style="margin:0">No movement data yet.</p>`;
+  const W = 640, H = 180, L = 36, R = 12, T = 10, B = 26;
+  const xs = points.map(p => p[0]), ys = points.map(p => p[1]);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = Math.min(0, ...ys), yMax = Math.max(...ys) || 1;
+  const sx = x => L + (x - xMin) / (xMax - xMin || 1) * (W - L - R);
+  const sy = y => T + (1 - (y - yMin) / (yMax - yMin || 1)) * (H - T - B);
+  const ticksY = 4, gridY = [];
+  for (let i = 0; i <= ticksY; i++) {
+    const v = yMin + (yMax - yMin) * i / ticksY, y = sy(v);
+    gridY.push(`<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="var(--grid)"/><text x="${L - 6}" y="${y + 4}" text-anchor="end">${+v.toFixed(1)}</text>`);
+  }
+  const ticksX = xs.map(x => `<text x="${sx(x)}" y="${H - 8}" text-anchor="middle">${x}</text>`).join("");
+  const path = points.map((p, i) => `${i ? "L" : "M"}${sx(p[0]).toFixed(1)},${sy(p[1]).toFixed(1)}`).join(" ");
+  const dots = points.map(p => `<circle cx="${sx(p[0])}" cy="${sy(p[1])}" r="3" fill="var(--line)"><title>min ${p[0]}: ${p[1]}</title></circle>`).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Position over time">
+    ${gridY.join("")}${ticksX}
+    <path d="${path}" fill="none" stroke="var(--line)" stroke-width="2" stroke-linejoin="round"/>${dots}
+  </svg><p class="hint" style="margin:2px 0 0;text-align:center">time (min)</p>`;
+}
+
+function renderLizard(l) {
+  const s = getStatus(l);
+  const speciesLabel = l.species ? l.species.replace(/\b\w/g, c => c.toUpperCase()) : "";
+  return `
+  <article class="card lizard" id="lizard-${l.id}" data-id="${l.id}">
+    <div class="lizard-head">
+      <div><h3 class="lizard-name" style="display:inline">${escapeHtml(l.name)}</h3><span class="lizard-species">${escapeHtml(speciesLabel)}</span></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="pill ${s}">${STATUS_LABEL[s]}</span>
+        <button class="btn ghost" type="button" data-action="remove" aria-label="Remove ${escapeHtml(l.name)}">Remove</button>
+      </div>
+    </div>
+    ${renderVideo(l)}
+    <div><h2>Stats</h2><dl class="stats">${renderStats(l.data)}</dl></div>
+    <div class="panel analysis"><h2>AI analysis</h2>${renderAnalysis(l)}</div>
+    <div class="panel ask">
+      <h2>Ask a question</h2>
+      <ul class="chat" data-chat></ul>
+      <form data-action="ask">
+        <input name="q" placeholder="e.g. Is ${escapeHtml(l.name)} warm enough?" autocomplete="off" required>
+        <button class="btn primary" type="submit">Ask</button>
+      </form>
+    </div>
+    <div class="panel graph"><h2>Position</h2>${renderGraph(l.data && l.data["Movement Data"])}</div>
+  </article>`;
+}
+
+function renderLizards() {
+  const el = document.getElementById("lizards");
+  el.innerHTML = lizards.length ? lizards.map(renderLizard).join("") : `<div class="card empty">No lizards yet.</div>`;
+  renderSummary();
+}
+
+/* ---------- Asking questions ---------- */
+// TODO: send the question, the lizard's latest data, and the API key to the backend (main.py) once it has an endpoint.
+async function askQuestion(lizard, question) {
+  const key = loadStored(STORE_KEY, "");
+  if (!key) return "Add an API key in Settings to ask questions.";
+  return "The AI backend isn't connected yet, so this question wasn't sent.";
+}
+
+/* ---------- Events ---------- */
+document.getElementById("lizards").addEventListener("click", e => {
+  const btn = e.target.closest("[data-action='remove']");
+  if (!btn) return;
+  const id = btn.closest(".lizard").dataset.id;
+  const l = lizards.find(x => x.id === id);
+  if (!confirm(`Remove ${l.name}?`)) return;
+  lizards = lizards.filter(x => x.id !== id);
+  saveStored(STORE_LIZARDS, lizards);
+  renderLizards();
+});
+
+document.getElementById("lizards").addEventListener("submit", async e => {
+  if (!e.target.matches("[data-action='ask']")) return;
+  e.preventDefault();
+  const form = e.target, input = form.q, q = input.value.trim();
+  if (!q) return;
+  const card = form.closest(".lizard"), chat = card.querySelector("[data-chat]");
+  const lizard = lizards.find(x => x.id === card.dataset.id);
+  const li = document.createElement("li");
+  li.innerHTML = `<div class="q">${escapeHtml(q)}</div><div class="a">…</div>`;
+  chat.appendChild(li);
+  input.value = "";
+  li.querySelector(".a").textContent = await askQuestion(lizard, q);
+  chat.scrollTop = chat.scrollHeight;
+});
+
+const addBtn = document.getElementById("add-btn");
+const addForm = document.getElementById("add-form");
+addBtn.addEventListener("click", () => { addBtn.hidden = true; addForm.hidden = false; addForm.name.focus(); });
+document.getElementById("add-cancel").addEventListener("click", () => { addForm.reset(); addForm.hidden = true; addBtn.hidden = false; });
+addForm.addEventListener("submit", e => {
+  e.preventDefault();
+  const name = addForm.elements.name.value.trim();
+  if (!name) return;
+  let id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "lizard";
+  while (lizards.some(l => l.id === id)) id += "-2";
+  const file = addForm.elements.file.files[0];
+  if (file) objectUrls[id] = URL.createObjectURL(file);
+  lizards.push({
+    id, name,
+    species: addForm.elements.species.value,
+    video: addForm.elements.video.value.trim(),
+    notes: addForm.elements.notes.value.trim(),
+    data: null
+  });
+  saveStored(STORE_LIZARDS, lizards);
+  addForm.reset(); addForm.hidden = true; addBtn.hidden = false;
+  renderLizards();
+  document.getElementById(`lizard-${id}`).scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+/* Tabs */
+const tabs = [...document.querySelectorAll(".tab")];
+function selectTab(tab) {
+  tabs.forEach(t => {
+    const on = t === tab;
+    t.setAttribute("aria-selected", on);
+    t.tabIndex = on ? 0 : -1;
+    document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
+  });
+}
+tabs.forEach(t => {
+  t.addEventListener("click", () => selectTab(t));
+  t.addEventListener("keydown", e => {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    const next = tabs[(tabs.indexOf(t) + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+    selectTab(next); next.focus();
+  });
+});
+
+/* Settings */
+const keyInput = document.getElementById("api-key");
+const keySaved = document.getElementById("key-saved");
+keyInput.value = loadStored(STORE_KEY, "");
+document.getElementById("settings-form").addEventListener("submit", e => {
+  e.preventDefault();
+  saveStored(STORE_KEY, keyInput.value.trim());
+  keySaved.textContent = "Saved"; keySaved.hidden = false;
+  setTimeout(() => keySaved.hidden = true, 1800);
+});
+document.getElementById("key-clear").addEventListener("click", () => {
+  keyInput.value = ""; saveStored(STORE_KEY, "");
+  keySaved.textContent = "Cleared"; keySaved.hidden = false;
+  setTimeout(() => keySaved.hidden = true, 1800);
+});
+document.getElementById("key-toggle").addEventListener("click", e => {
+  const show = keyInput.type === "password";
+  keyInput.type = show ? "text" : "password";
+  e.currentTarget.textContent = show ? "Hide" : "Show";
+  e.currentTarget.setAttribute("aria-pressed", show);
+});
+
+renderLizards();
+</script>
+</body>
+</html>

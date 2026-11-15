@@ -1,6 +1,4 @@
-from flask import *
 from json import load, dump
-
 
 
 # send this schema to ai to fill out
@@ -38,6 +36,14 @@ def ParsePDF(pathToImageFolder):
     pass
 
 
+def TakeAPicture(camera, pathToLizardFolder):
+    # runs every 5 minutes
+    pass
+
+
+def CreateNewLizard(formData):
+    # recieves form data from the website, creates the new file structure
+    pass
 
 
 
