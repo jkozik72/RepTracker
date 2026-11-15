@@ -14,7 +14,6 @@ Every open question in one place. Add rows at the bottom with the next ID; never
 | Q10 | What decides "lizard present", and what is the poll rate? | The backend polls the AI only if the lizard is present, and the brief prefers one AI API call per poll. | Lizard present from the motion statistics; from the VLM or LLM; from both ("Speed and VLM check" on the board). Poll rate: TBD. | [brief § Research and image analysis][b-ai], [§ Statistics][b-stats]; [board § Design decisions][s-dd], 2026-11-14 |
 | Q12 | What is the finite set of statuses, and which fields does the structured report have? | Status, alerts, and statistics such as the last shed are built from the report. | Examples so far: shedding, overweight; "not in frame". | [brief § Research and image analysis][b-ai] (s. 10–14), 2026-11-14 |
 | Q13 | Which statistics do we compute, and in what units? | They fill the stats panel and the movement graph, and they go to the AI. | Named so far: position, speed, lizard present, last shed, shed duration. | [brief § Statistics][b-stats], 2026-11-14 |
-| Q14 | What does research produce: which fields, images or not, stored where? Does the UI display it? | It is the AI's reference for the species. The UI board asks whether to display it. | TBD | [brief § Research and image analysis][b-ai] (s. 6–8); [UI board § Dashboard][u-dash], 2026-11-14 |
 | Q15 | Which sensors, and what do their files look like: format, sample rate, length? | The add-lizard form selects them and the AI receives them. | "H, C" on the UI board, not spelled out. | [brief § Inputs][b-inputs] (s. 24); [UI board § Add lizard form][u-form], 2026-11-14 |
 | Q16 | Which videos do we use, and in what form: source, length, resolution, frame rate, top or side view, the JSON that lists the cameras? | Motion tracking is designed and tested on them. | One video filmed by the team; others found online. | [brief § Inputs][b-inputs] (s. 23); [board § Add lizard][s-add], 2026-11-14 |
 | Q17 | How does a finite video map onto dashboard time: played once, looped, sped up? | The movement graph is meant to show movement throughout the day, and the dashboard should look real-time. | TBD | [brief § Product][b-product] (s. 3), [§ Inputs][b-inputs] (s. 25–28), 2026-11-14 |
@@ -31,6 +30,7 @@ Every open question in one place. Add rows at the bottom with the next ID; never
 | Q5 | A single computer, serving a local website. | [brief § Product][b-product] |
 | Q11 | The Claude API, model `claude-opus-5-5` by default (`REPTRACKER_CLAUDE_MODEL` changes it), for image analysis and questions. It reads the PDFs of camera images, so it is used as a VLM. Research has no provider yet. Gemini and the Mock stay selectable. | [D4](decisions.md); [Claude chat][cl-chat] |
 | Q20 | An Anthropic API key, entered in Settings (dev mode) and kept on the computer that runs the app (`src/website/data/claude-key.json`, git-ignored), or the `ANTHROPIC_API_KEY` environment variable. Gemini keeps using the computer's Google login. | [D4](decisions.md); [Claude chat][cl-chat] |
+| Q14 | A species profile per species, written by the AI from the species typed in plain English: ranges, feeding, droppings, shedding, observable activities, body condition, conditions with visible signs, hazards (`prompts/profile-schema.json`). Stored in `src/website/research/<slug>/profile.json` with Wikimedia Commons photos; shown and editable on the Research tab; used in every analysis and for sensor alerts. | [D5](decisions.md); [species chat][sp-chat] |
 
 [b-product]: notes/2026-11-14-project-brief.md#product
 [b-ai]: notes/2026-11-14-project-brief.md#research-and-image-analysis
@@ -47,3 +47,4 @@ Every open question in one place. Add rows at the bottom with the next ID; never
 [g-chat]: notes/2026-11-15-gemini-provider-chat.md#key-points
 [c-open]: notes/2026-11-14-dashboard-changes-chat.md#open-questions
 [cl-chat]: notes/2026-11-15-claude-provider-chat.md#key-points
+[sp-chat]: notes/2026-11-15-species-profiles-chat.md#key-points

@@ -170,6 +170,36 @@
   .form-actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
   .empty { padding: 28px 16px; text-align: center; color: var(--muted); }
 
+  /* Research */
+  .research-new { padding: 16px; display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 16px; }
+  .research-new .full { flex-basis: 100%; margin: 0; }
+  .profile-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .profile-card { appearance: none; text-align: left; font: inherit; color: inherit; cursor: pointer; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .profile-card[aria-current="true"] { outline: 2px solid var(--accent); }
+  .profile-card img, .profile-card .noimg { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: var(--surface-2); }
+  .profile-card .noimg { display: grid; place-items: center; color: var(--muted); font-size: 13px; }
+  .profile-card .body { padding: 10px 12px; display: grid; gap: 2px; }
+  .profile-card .sci { font-style: italic; color: var(--muted); font-size: 13px; }
+  .profile { padding: 18px; display: grid; gap: 16px; }
+  .profile-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+  .profile-head h2 { font-size: 22px; text-transform: none; letter-spacing: 0; color: var(--text); margin: 0; }
+  .profile .pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .gallery figure { margin: 0; } .gallery img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; display: block; }
+  .gallery figcaption { font-size: 11px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin: 0; }
+  .facts div { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+  .facts dt { font-size: 12px; color: var(--muted); } .facts dd { margin: 0; font-weight: 600; }
+  .ptable { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .ptable th, .ptable td { text-align: left; vertical-align: top; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .ptable th { font-size: 12px; color: var(--muted); font-weight: 600; }
+  .ptable ul { margin: 0; padding-left: 16px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .caution { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+  .profile textarea { font: 12.5px/1.45 ui-monospace, Consolas, monospace; min-height: 360px; }
+  .stat dd.out { color: var(--bad); }
+  .species-hint { margin: 4px 0 0; }
+
   /* Settings */
   .settings { padding: 18px; max-width: 640px; display: grid; gap: 18px; }
   .poll-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .poll-row select { width: auto; }
@@ -221,6 +251,7 @@
     </div>
     <nav role="tablist" aria-label="Sections">
       <button class="tab" role="tab" id="tab-dashboard" aria-controls="view-dashboard" aria-selected="true">Dashboard</button>
+      <button class="tab" role="tab" id="tab-research" aria-controls="view-research" aria-selected="false" tabindex="-1">Research</button>
       <button class="tab" role="tab" id="tab-settings" aria-controls="view-settings" aria-selected="false" tabindex="-1">Settings</button>
     </nav>
   </div>
@@ -262,10 +293,9 @@
         </div>
         <div>
           <label for="f-species">Species</label>
-          <select id="f-species" name="species">
-            <option value="leopard gecko">Leopard gecko</option>
-            <option value="skink">Skink</option>
-          </select>
+          <input id="f-species" name="species" list="species-options" maxlength="60" placeholder="e.g. leopard gecko" required>
+          <datalist id="species-options"></datalist>
+          <p class="hint species-hint" id="f-species-hint"></p>
         </div>
         <div>
           <label for="f-width">Enclosure width (cm, optional)</label>
@@ -335,6 +365,20 @@
         </div>
       </form>
     </div>
+  </section>
+
+  <section id="view-research" role="tabpanel" aria-labelledby="tab-research" hidden>
+    <form class="card research-new" id="research-form" autocomplete="off">
+      <div style="flex:1 1 260px">
+        <label for="research-species">Species, in plain English</label>
+        <input id="research-species" name="species" maxlength="60" placeholder="e.g. crested gecko, red-eared slider, pacman frog" required>
+      </div>
+      <button class="btn primary" type="submit">Create profile</button>
+      <p class="hint full" id="research-hint"></p>
+      <p class="error full" id="research-error" hidden></p>
+    </form>
+    <div class="profile-list" id="profile-list"></div>
+    <div id="profile-view"></div>
   </section>
 
   <section id="view-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
@@ -532,10 +576,12 @@ function channels(config) {
 }
 
 /* ================= Alerts & status ================= */
+// Live sensor alerts, from each lizard's readings and its species profile ranges (filled in by checkSensorRanges)
+const sensorAlerts = {};
 function getAlerts(lizard) {
+  const out = [...(sensorAlerts[lizard.id] || [])];
   const r = lizard.latest && lizard.latest.result;
-  if (!r) return [];
-  const out = [];
+  if (!r) return out;
   for (const [k, v] of Object.entries(r["Hazardous conditions"] || {})) {
     if (v === true) out.push(k);
     else if (typeof v === "string" && v.trim() && v.toLowerCase() !== "none") out.push(`${k}: ${v}`);
@@ -545,8 +591,8 @@ function getAlerts(lizard) {
   return out;
 }
 function getStatus(lizard) {
-  if (!lizard.latest) return "none";
   if (getAlerts(lizard).length) return "bad";
+  if (!lizard.latest) return "none";
   const shed = (lizard.latest.result.Shed || "").toLowerCase();
   return shed === "now" || shed === "soon" ? "warn" : "ok";
 }
@@ -577,6 +623,11 @@ function renderVideoBox(c, fullscreen = false) {
     </div>`;
 }
 
+function compactAlertsHtml(l) {
+  const s = getStatus(l), alerts = getAlerts(l), shown = alerts.slice(0, 2), more = alerts.length - shown.length;
+  return alerts.length ? shown.map(a => `<span class="pill bad" title="${esc(a)}">${esc(a)}</span>`).join("") + (more > 0 ? `<span class="pill bad" title="${esc(alerts.slice(2).join("\n"))}">+${more}</span>` : "")
+                       : `<span class="pill ${s}">${STATUS_LABEL[s]}</span>`;
+}
 function renderCompactLizard(l) {
   const c = l.config, s = getStatus(l), alerts = getAlerts(l);
   const shown = alerts.slice(0, 2), more = alerts.length - shown.length;
@@ -802,6 +853,48 @@ function renderPositionChart(l) {
   }) + `<p class="hint" style="margin:2px 0 0">${ps.unit} (0 = left, ${W} = right; hot side ${esc(l.config.sensors.hotSide)}) · one point per image, local time${seen < md.length ? ` · seen in ${seen} of ${md.length} images. Dashed: not visible in between (behind decor or out of frame); ticks on the bottom mark those images` : ""}</p>`;
 }
 
+/* Sensor readings against the species profile: out-of-range values turn red and become alerts. */
+const toUnit = (f, unit) => unit === "C" ? (f - 32) * 5 / 9 : f;
+function rangeFor(l, ch) {
+  const p = l.profile; if (!p) return null;
+  if (ch.kind === "temperature") {
+    const r = ch.key === "hot" ? p.temperaturesF.hotSide : p.temperaturesF.coldSide;
+    return { min: toUnit(r.min, ch.unit), max: toUnit(r.max, ch.unit) };
+  }
+  return ch.unit === "%RH" ? p.humidityPercent : null;   // the profile gives relative humidity only
+}
+async function checkSensorRanges(l, now) {
+  const offsetS = (now - Date.parse(l.config.createdAt)) / 1000;
+  const alerts = [];
+  if (l.profile && offsetS >= 0) {
+    const chs = channels(l.config);
+    let data;
+    try { data = await Promise.all(chs.map(ch => loadSeries(ch.series))); } catch { return; }
+    const card = document.getElementById(`lizard-${l.id}`);
+    const values = chs.map((ch, i) => readSeries(data[i], offsetS));
+    const say = (what, v, r, unit) => `${what} ${v.toFixed(1)} ${UNIT_LABEL[unit]} is ${v < r.min ? "below" : "above"} ${r.min.toFixed(0)}–${r.max.toFixed(0)} ${UNIT_LABEL[unit]} for ${l.profile.commonName}`;
+    // Temperatures: each side against its own range.
+    chs.forEach((ch, i) => {
+      if (ch.kind !== "temperature") return;
+      const r = rangeFor(l, ch), v = values[i], el = card?.querySelector(`[data-sensor="${i}"]`), out = v < r.min || v > r.max;
+      if (el) { el.classList.toggle("out", out); el.title = `${l.profile.commonName}, ${ch.key} side: ${r.min.toFixed(0)}–${r.max.toFixed(0)} ${UNIT_LABEL[ch.unit]}`; }
+      if (out) alerts.push(say(`${ch.key === "hot" ? "Hot" : "Cold"} side temperature`, v, r, ch.unit));
+    });
+    // Humidity: the species range is for the enclosure, so the average of both sides is checked (the hot side is drier).
+    const hum = chs.map((ch, i) => ({ ch, i })).filter(x => x.ch.kind === "humidity" && x.ch.unit === "%RH");
+    if (hum.length) {
+      const r = l.profile.humidityPercent, avg = hum.reduce((sum, x) => sum + values[x.i], 0) / hum.length, out = avg < r.min || avg > r.max;
+      hum.forEach(x => { const el = card?.querySelector(`[data-sensor="${x.i}"]`); if (el) { el.classList.toggle("out", out); el.title = `${l.profile.commonName}: ${r.min}–${r.max} % RH, enclosure average ${avg.toFixed(1)} %`; } });
+      if (out) alerts.push(say(`Humidity (average of ${hum.length === 2 ? "both sides" : "the sensor"})`, avg, r, "%RH"));
+    }
+  }
+  if (JSON.stringify(alerts) === JSON.stringify(sensorAlerts[l.id] || [])) return;
+  sensorAlerts[l.id] = alerts;
+  renderSummary();
+  const compact = document.querySelector(`#lizard-${l.id}.compact .compact-alerts`);
+  if (compact) compact.innerHTML = compactAlertsHtml(l);
+}
+
 /* ================= Real-time loop: camera + sensors ================= */
 let lastChartDraw = 0;
 function tick(forceCharts) {
@@ -827,7 +920,7 @@ function tick(forceCharts) {
       if (offsetS < 0) { el.textContent = "—"; return; }
       loadSeries(ch.series).then(s => { el.textContent = `${readSeries(s, offsetS).toFixed(1)} ${UNIT_LABEL[ch.unit]}`; }).catch(() => { el.textContent = "missing file"; });
     });
-    if (drawCharts) renderSensorCharts(card, l, now);
+    if (drawCharts) { renderSensorCharts(card, l, now); checkSensorRanges(l, now); }
     followClockRange(card, now);
   }
 }
@@ -1014,7 +1107,16 @@ function guessUnit(sel) {
   const unitSel = sel.parentElement.querySelector("select:not([data-media])");
   if (unit && [...unitSel.options].some(o => o.value === unit)) unitSel.value = unit;
 }
+function speciesHint() {
+  const typed = slugify(addForm.elements.species.value), hint = $("#f-species-hint");
+  if (!typed) { hint.textContent = "Type it in plain English."; return; }
+  const match = profiles.find(pr => [pr.slug, slugify(pr.species), slugify(pr.commonName), slugify(pr.scientificName)].includes(typed));
+  hint.innerHTML = match ? `Profile: <strong>${esc(match.commonName)}</strong> <em>${esc(match.scientificName)}</em>. Used for alerts and analyses.`
+                         : `No profile yet. Create one on the Research tab for sensor alerts and better analyses.`;
+}
 function fillMediaSelects() {
+  $("#species-options").innerHTML = profiles.map(pr => `<option value="${esc(pr.species)}">${esc(pr.commonName)} · ${esc(pr.scientificName)}</option>`).join("");
+  speciesHint();
   addForm.querySelectorAll("[data-media]").forEach(sel => {
     const list = media[sel.dataset.media];
     sel.innerHTML = list.length ? list.map(n => `<option>${esc(n)}</option>`).join("") : `<option value="">No ${sel.dataset.media === "videos" ? "videos" : "sensor files"} yet</option>`;
@@ -1028,6 +1130,7 @@ function fillMediaSelects() {
     ? `<span style="color:var(--bad)">${mode() === "main" ? "Main" : "Toy"} mode has no ${!media.videos.length ? "videos" : "sensor files"} yet. ${settings.devMode ? "Upload them in Settings." : "Turn on dev mode in Settings to upload them."}</span>`
     : `Videos and sensor files come from ${mode()} mode's media${settings.devMode ? "; upload more in Settings" : ""}.`;
 }
+addForm.elements.species.addEventListener("input", speciesHint);
 addForm.addEventListener("change", e => { if (e.target.matches("[data-media='sensors']")) guessUnit(e.target); });
 // The same form adds a lizard or edits one (editingId set). Editing keeps the lizard's id, start time and analyses.
 let editingId = null;
@@ -1040,7 +1143,7 @@ function openEdit(l) {
   closeAdd(); fillMediaSelects();
   editingId = l.id;
   $("#form-title").textContent = `Edit ${c.name}`; $("#form-submit").textContent = "Save changes";
-  f.name.value = c.name; f.species.value = c.species; f.width.value = c.enclosureWidthCm ?? "";
+  f.name.value = c.name; f.species.value = c.species; f.width.value = c.enclosureWidthCm ?? ""; speciesHint();
   f.view.value = c.camera.view; f.video.value = c.camera.video;
   f.hotSide.value = c.sensors.hotSide; $("#f-coldside").textContent = c.sensors.hotSide === "left" ? "Right" : "Left";
   for (const [key, side] of [["hot", "hot"], ["cold", "cold"]]) {
@@ -1057,7 +1160,7 @@ addForm.addEventListener("submit", async e => {
   e.preventDefault();
   const f = addForm.elements;
   const body = {
-    name: f.name.value.trim(), species: f.species.value,
+    name: f.name.value.trim(), species: f.species.value.trim(),
     enclosureWidthCm: f.width.value.trim() === "" ? null : +f.width.value,
     createdAt: new Date(simNow()).toISOString(),   // ignored when editing: the lizard keeps its start time
     camera: { view: f.view.value, video: f.video.value },
@@ -1086,7 +1189,8 @@ addForm.addEventListener("submit", async e => {
 const tabs = [...document.querySelectorAll(".tab")];
 function selectTab(tab) {
   tabs.forEach(t => { const on = t === tab; t.setAttribute("aria-selected", on); t.tabIndex = on ? 0 : -1; document.getElementById(t.getAttribute("aria-controls")).hidden = !on; });
-  if (tab.id === "tab-settings") loadAi();   // re-check, e.g. after signing in to Google in a terminal
+  if (tab.id === "tab-settings") loadAi();
+  if (tab.id === "tab-research") loadProfiles();   // re-check, e.g. after signing in to Google in a terminal
 }
 tabs.forEach(t => {
   t.addEventListener("click", () => selectTab(t));
@@ -1338,6 +1442,129 @@ document.querySelector('[data-file-list="videos"]').addEventListener("click", as
   } catch (x) { err.textContent = x.message; err.hidden = false; }
 });
 
+/* ================= Research: species profiles ================= */
+let profiles = [];          // summaries: {slug, species, commonName, scientificName, animalType, image, usedBy, ...}
+let openProfile = null;     // slug shown below the list
+const slugify = t => String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+async function researchApi(method, path = "", body) {
+  return readResponse(await fetch(`/api/research${path}`, {
+    method, headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined }));
+}
+async function loadProfiles() {
+  try { profiles = await researchApi("GET"); } catch (x) { $("#research-error").textContent = x.message; $("#research-error").hidden = false; }
+  renderProfileList();
+  $("#research-hint").textContent = `One call to the AI provider in use (${ai.provider || "…"}) writes the profile: ranges, feeding, droppings, shedding, common conditions and their visible signs, hazards. `
+    + "Reference photos come from Wikimedia Commons. Check the profile before relying on it: dashboard alerts use its ranges.";
+  if (openProfile && profiles.some(p => p.slug === openProfile)) showProfile(openProfile);
+}
+function renderProfileList() {
+  $("#profile-list").innerHTML = profiles.length ? profiles.map(p => `
+    <button class="card profile-card" type="button" data-profile="${esc(p.slug)}" ${p.slug === openProfile ? 'aria-current="true"' : ""}>
+      ${p.image ? `<img src="/research/${esc(p.slug)}/images/${esc(p.image)}" alt="" loading="lazy">` : `<span class="noimg">No photo</span>`}
+      <span class="body"><strong>${esc(p.commonName)}</strong><span class="sci">${esc(p.scientificName)}</span>
+        <span class="hint" style="margin:0">${esc(p.animalType)}${p.usedBy.length ? ` · used by ${p.usedBy.length}` : ""}${p.edited ? " · edited" : ""}</span></span>
+    </button>`).join("") : `<div class="card empty" style="grid-column:1/-1">No species profiles yet. Type a species above.</div>`;
+}
+const rng = (r, unit = "") => r.min === r.max ? `${+r.min.toFixed(1)}${unit}` : `${+r.min.toFixed(1)}–${+r.max.toFixed(1)}${unit}`;
+const URGENCY = { monitor: "ok", "vet soon": "warn", emergency: "bad" };
+function renderProfile(rec) {
+  const p = rec.profile, t = p.temperaturesF;
+  const fact = (k, v) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`;
+  return `<article class="card profile">
+    <div class="profile-head">
+      <div><h2>${esc(p.commonName)}</h2><div class="sci" style="font-style:italic;color:var(--muted)">${esc(p.scientificName)}</div>
+        <div class="pills"><span class="pill none">${esc(p.animalType)}</span><span class="pill none">${esc(p.habitat)}</span><span class="pill none">${esc(p.activityPattern)}</span>
+          ${rec.edited ? '<span class="pill ok">checked and edited</span>' : '<span class="pill warn">AI-written, not checked yet</span>'}</div></div>
+      <div class="form-actions" style="justify-content:flex-end">
+        <button class="btn" type="button" data-profile-action="edit">Edit</button>
+        <button class="btn" type="button" data-profile-action="regenerate">Regenerate</button>
+        <button class="btn ghost" type="button" data-profile-action="delete">Delete</button>
+      </div>
+    </div>
+    <p style="margin:0">${esc(p.summary)}</p>
+    ${rec.images?.length ? `<div class="gallery">${rec.images.map(i => `<figure><a href="${esc(i.source)}" target="_blank" rel="noopener noreferrer"><img src="/research/${esc(rec.slug)}/images/${esc(i.file)}" alt="${esc(i.title)}" loading="lazy"></a>
+      <figcaption>${esc(i.author)} · ${esc(i.license)} · Wikimedia Commons</figcaption></figure>`).join("")}</div>` : '<p class="hint" style="margin:0">No reference photos.</p>'}
+    <div><h2>Husbandry</h2><dl class="facts">
+      ${fact("Hot side", rng(t.hotSide, " °F"))}${fact("Cold side", rng(t.coldSide, " °F"))}${fact("Basking surface", rng(t.basking, " °F"))}${fact("Night", rng(t.night, " °F"))}
+      ${fact("Humidity", rng(p.humidityPercent, " %"))}${fact("UVB", p.uvb)}${fact("Adult length", rng(p.adultSize.lengthCm, " cm"))}${fact("Adult weight", rng(p.adultSize.weightG, " g"))}
+      ${fact("Lifespan", rng(p.lifespanYears, " years"))}${fact("Diet", p.diet)}
+      ${p.feeding.map(f => fact(`Feeding (${f.stage})`, `every ${rng(f.intervalDays, " days")}${f.notes ? `. ${f.notes}` : ""}`)).join("")}
+      ${fact("Droppings", `about every ${rng(p.droppings.intervalDays, " days")}. ${p.droppings.notes}`)}
+      ${fact("Shedding", `${p.shedding.type}, about every ${rng(p.shedding.intervalDays, " days")}. ${p.shedding.signs}`)}
+    </dl></div>
+    <div><h2>What the camera can see</h2><div class="chips">${p.observableActivities.map(a => `<span class="pill none">${esc(a)}</span>`).join("")}</div></div>
+    <div><h2>Body condition</h2><dl class="facts">${fact("Healthy", p.bodyCondition.healthy)}${fact("Underweight", p.bodyCondition.underweight)}${fact("Overweight", p.bodyCondition.overweight)}</dl></div>
+    <div><h2>Conditions to watch for</h2><table class="ptable"><thead><tr><th>Condition</th><th>Visible signs</th><th>Urgency</th><th>Notes</th></tr></thead><tbody>
+      ${p.conditions.map(c => `<tr><td><strong>${esc(c.name)}</strong></td><td><ul>${c.visibleSigns.map(v => `<li>${esc(v)}</li>`).join("")}</ul></td>
+        <td><span class="pill ${URGENCY[c.urgency] || "none"}">${esc(c.urgency)}</span></td><td>${esc(c.notes)}</td></tr>`).join("")}</tbody></table></div>
+    <div><h2>Hazards</h2><table class="ptable"><tbody>${p.hazards.map(h => `<tr><td><strong>${esc(h.name)}</strong></td><td>${esc(h.description)}</td></tr>`).join("")}</tbody></table></div>
+    ${p.husbandryNotes ? `<div><h2>Notes</h2><p style="margin:0">${esc(p.husbandryNotes)}</p></div>` : ""}
+    <div class="caution"><strong>Confidence:</strong> ${esc(p.confidence)} Dashboard alerts use these ranges; check them against a care sheet or a vet.</div>
+    <p class="hint" style="margin:0">Typed as "${esc(rec.species)}" · ${esc(rec.provider || "?")}${rec.model ? ` (${esc(rec.model)})` : ""} · ${esc(fmtShort(Date.parse(rec.createdAt)))}
+      ${rec.tokens ? ` · ${rec.tokens.total.toLocaleString()} tokens` : ""} · used by ${rec.usedBy.length ? esc(rec.usedBy.join(", ")) : "no animals yet"} · research/${esc(rec.slug)}/profile.json</p>
+    ${rec.notes?.length ? `<p class="hint" style="margin:0">Notes: ${esc(rec.notes.join(" "))}</p>` : ""}
+    <div data-profile-editor hidden>
+      <label for="profile-json">Profile JSON (prompts/profile-schema.json). Saving marks it as checked.</label>
+      <textarea id="profile-json" spellcheck="false"></textarea>
+      <div class="form-actions" style="justify-content:flex-start;margin-top:8px">
+        <button class="btn primary" type="button" data-profile-action="save">Save</button>
+        <button class="btn" type="button" data-profile-action="cancel">Cancel</button>
+      </div>
+    </div>
+    <p class="error" data-profile-error hidden></p>
+  </article>`;
+}
+let openRecord = null;
+async function showProfile(slug) {
+  openProfile = slug; renderProfileList();
+  try { openRecord = await researchApi("GET", `/${slug}`); $("#profile-view").innerHTML = renderProfile(openRecord); }
+  catch (x) { $("#profile-view").innerHTML = `<p class="error">${esc(x.message)}</p>`; }
+}
+$("#profile-list").addEventListener("click", e => {
+  const card = e.target.closest("[data-profile]"); if (!card) return;
+  showProfile(card.dataset.profile).then(() => $("#profile-view").scrollIntoView({ behavior: "smooth", block: "start" }));
+});
+async function runResearch(species, regenerate, button) {
+  const err = $("#research-error"); err.hidden = true;
+  const label = button.textContent; button.disabled = true; button.textContent = realAi() ? "Researching with the AI…" : "Researching…";
+  try {
+    const rec = await researchApi("POST", "", { species, regenerate });
+    openProfile = rec.slug; await loadProfiles(); await loadMode();
+    $("#research-form").reset();
+    $("#profile-view").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (x) { err.textContent = x.message; err.hidden = false; }
+  button.disabled = false; button.textContent = label;
+}
+$("#research-form").addEventListener("submit", e => {
+  e.preventDefault();
+  const species = e.target.species.value.trim(); if (!species) return;
+  runResearch(species, false, e.target.querySelector("button"));
+});
+$("#profile-view").addEventListener("click", async e => {
+  const btn = e.target.closest("[data-profile-action]"); if (!btn || !openRecord) return;
+  const view = $("#profile-view"), editor = view.querySelector("[data-profile-editor]"), err = view.querySelector("[data-profile-error]");
+  err.hidden = true;
+  const act = btn.dataset.profileAction;
+  if (act === "edit") { editor.hidden = false; view.querySelector("#profile-json").value = JSON.stringify(openRecord.profile, null, 2); editor.scrollIntoView({ block: "center" }); }
+  if (act === "cancel") editor.hidden = true;
+  if (act === "save") {
+    let profile;
+    try { profile = JSON.parse(view.querySelector("#profile-json").value); } catch (x) { err.textContent = `Not valid JSON: ${x.message}`; err.hidden = false; return; }
+    try { openRecord = await researchApi("PUT", `/${openRecord.slug}`, { profile }); view.innerHTML = renderProfile(openRecord); await loadProfiles(); await loadMode(); }
+    catch (x) { err.textContent = x.message; err.hidden = false; }
+  }
+  if (act === "regenerate") {
+    if (!confirm(`Replace the ${openRecord.profile.commonName} profile with a new one from the AI? Edits to this one are lost.`)) return;
+    runResearch(openRecord.species, true, btn);
+  }
+  if (act === "delete") {
+    const users = openRecord.usedBy.length ? ` ${openRecord.usedBy.join(", ")} will have no profile.` : "";
+    if (!confirm(`Delete the ${openRecord.profile.commonName} profile and its photos?${users}`)) return;
+    try { profiles = await researchApi("DELETE", `/${openRecord.slug}`); openProfile = openRecord = null; view.innerHTML = ""; renderProfileList(); await loadMode(); }
+    catch (x) { err.textContent = x.message; err.hidden = false; }
+  }
+});
+
 /* Load the current mode's media and lizards */
 async function loadMode() {
   $("#load-error").hidden = true;
@@ -1355,6 +1582,7 @@ async function loadMode() {
 }
 loadMode();
 loadAi();
+loadProfiles();
 </script>
 </body>
 </html>

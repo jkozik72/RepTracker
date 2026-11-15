@@ -46,3 +46,12 @@ Entry format:
 - **Consequences:** The API key is entered in Settings (dev mode) and kept on the computer that runs the app (`src/website/data/claude-key.json`, git-ignored), or read from `ANTHROPIC_API_KEY`. Gemini and the Mock stay selectable in Settings; the Mock remains the default until a key is saved and Claude is selected. Requests cost money per call.
 - **Sources:** `docs/notes/2026-11-15-claude-provider-chat.md`
 - **Replaces:** none
+
+## D5 (2026-11-15): AI-written species profiles, stored and reused, with the species typed in plain English
+- **Context:** Analyses need to know what is normal for a species (temperatures, humidity, feeding, shedding, common diseases and their signs) to judge an animal well. The species was picked from a fixed list of two with no stored knowledge; Q14 left research open.
+- **Options:** A: a fixed species list with hand-written care data. B: ask the AI about the species in every analysis. C: one AI call per species writes a structured profile, stored, shown to the keeper, editable, and reused by every analysis and for sensor alerts.
+- **Chose:** C. The keeper types the species in plain English on the Research tab; the AI provider in use fills `prompts/profile-schema.json` once; the profile is saved in `src/website/research/<slug>/profile.json` (committed) with reference photos from Wikimedia Commons (git-ignored, with author and licence). It goes into the CONTEXT chunk of every analysis, and the dashboard compares live sensor readings with its ranges.
+- **Consequences:** Any species can be typed; one research call per species instead of extra tokens in every analysis. Alerts depend on AI-written ranges, so the Research tab marks a profile "not checked yet" until a keeper edits it, and shows the AI's own confidence note. Research works with Claude and the Mock; Gemini is not supported for research yet.
+- **Sources:** `docs/notes/2026-11-15-species-profiles-chat.md`; `docs/notes/2026-11-14-project-brief.md` § Research and image analysis
+- **Replaces:** none
+

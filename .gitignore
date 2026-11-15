@@ -42,3 +42,6 @@ src/website/data/ai-settings.json
 src/website/data/claude-key.json
 # Which Claude model this computer uses (chosen in Settings)
 src/website/data/claude-settings.json
+
+# Species reference photos (Wikimedia Commons), downloaded again when a profile is created
+src/website/research/*/images/

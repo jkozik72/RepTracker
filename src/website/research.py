@@ -1,0 +1,241 @@
+"""Species profiles: what RepTracker knows about a species, written once by the AI and reused.
+
+A keeper types a species in plain English on the Research tab. One AI call fills in
+prompts/profile-schema.json (ranges, feeding, droppings, shedding, conditions and their visible
+signs, hazards...). The profile is saved in research/<slug>/profile.json and is then used by every
+analysis of an animal of that species (the CONTEXT chunk) and for sensor alerts on the dashboard.
+
+Reference photos come from Wikimedia Commons (search by scientific name), saved in
+research/<slug>/images/ with their author, licence and source page. Profiles are committed;
+photos are git-ignored and can be fetched again.
+
+Nothing here calls an AI provider: main.py does that and hands the reply to NormalizeProfile.
+"""
+import html
+import json
+import logging
+import re
+import urllib.parse
+import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+RESEARCH = ROOT / "research"
+PROMPTS = ROOT / "prompts"
+COMMONS_API = "https://commons.wikimedia.org/w/api.php"
+USER_AGENT = "RepTracker/0.1 (local reptile-care dashboard; species reference photos)"
+MAX_IMAGES = 6
+IMAGE_WIDTH = 640
+
+log = logging.getLogger("reptracker.research")
+
+
+class ResearchError(Exception):
+    """A problem with a profile, with a message that is safe to show on the page."""
+
+
+# ---------- names and files ----------
+
+def Slug(text):
+    return re.sub(r"[^a-z0-9]+", "-", str(text or "").lower()).strip("-")[:60]
+
+
+def Folder(slug):
+    if not re.fullmatch(r"[a-z0-9-]+", slug or ""):
+        raise ResearchError("Unknown species profile.")
+    return RESEARCH / slug
+
+
+def ReadRecord(slug):
+    try:
+        return json.loads((Folder(slug) / "profile.json").read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+def WriteRecord(record):
+    folder = Folder(record["slug"])
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "profile.json").write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def Schema():
+    return json.loads((PROMPTS / "profile-schema.json").read_text(encoding="utf-8"))
+
+
+def ListRecords():
+    records = []
+    for path in sorted(RESEARCH.glob("*/profile.json")):
+        record = ReadRecord(path.parent.name)
+        if record:
+            records.append(record)
+    return records
+
+
+def Summary(record):
+    """What the Research list shows for one profile."""
+    p = record["profile"]
+    return {"slug": record["slug"], "species": record["species"], "commonName": p["commonName"],
+            "scientificName": p["scientificName"], "animalType": p["animalType"], "createdAt": record["createdAt"],
+            "provider": record.get("provider"), "model": record.get("model"), "edited": record.get("edited", False),
+            "image": record["images"][0]["file"] if record.get("images") else None}
+
+
+def FindRecord(species):
+    """The profile for a species as a keeper wrote it: matches the typed name, common name or scientific name."""
+    want = Slug(species)
+    if not want:
+        return None
+    direct = ReadRecord(want) if (RESEARCH / want / "profile.json").exists() else None
+    if direct:
+        return direct
+    for record in ListRecords():
+        p = record["profile"]
+        if want in (Slug(record["species"]), Slug(p["commonName"]), Slug(p["scientificName"])):
+            return record
+    return None
+
+
+def NewRecord(species, profile, provider, model):
+    slug = Slug(species)
+    if not slug:
+        raise ResearchError("Type a species first.")
+    return {"slug": slug, "species": species.strip(), "createdAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "provider": provider, "model": model, "edited": False, "profile": profile, "images": []}
+
+
+# ---------- forcing a reply into the profile schema ----------
+
+def _Resolve(schema, root):
+    ref = schema.get("$ref") if isinstance(schema, dict) else None
+    if ref and ref.startswith("#/$defs/"):
+        return root["$defs"][ref.split("/")[-1]]
+    return schema
+
+
+def _Normalize(value, schema, root, path, notes):
+    schema = _Resolve(schema, root)
+    if "enum" in schema:
+        if value in schema["enum"]:
+            return value
+        fallback = "other" if "other" in schema["enum"] else schema["enum"][-1]
+        notes.append(f"{path}: {value!r} is not one of {schema['enum']}; used {fallback!r}.")
+        return fallback
+    kind = schema.get("type")
+    if kind == "object":
+        value = value if isinstance(value, dict) else {}
+        out = {}
+        for key in schema.get("required", []):
+            out[key] = _Normalize(value.get(key), schema["properties"][key], root, f"{path}.{key}" if path else key, notes)
+        if set(out) == {"min", "max"} and isinstance(out["min"], float) and out["min"] > out["max"]:
+            out["min"], out["max"] = out["max"], out["min"]
+            notes.append(f"{path}: min was above max; swapped.")
+        return out
+    if kind == "array":
+        items = value if isinstance(value, list) else []
+        return [_Normalize(item, schema["items"], root, f"{path}[{i}]", notes) for i, item in enumerate(items)]
+    if kind == "number":
+        try:
+            number = float(value)
+            if number != number or number in (float("inf"), float("-inf")):
+                raise ValueError
+            return number
+        except (TypeError, ValueError):
+            notes.append(f"{path}: {value!r} is not a number; used 0.")
+            return 0.0
+    return "" if value is None else str(value).strip()
+
+
+def NormalizeProfile(raw, schema=None):
+    """Force an AI reply (or a keeper's edit) into prompts/profile-schema.json; returns (profile, notes)."""
+    schema = schema or Schema()
+    if not isinstance(raw, dict) or not str(raw.get("commonName") or "").strip():
+        raise ResearchError("The profile has no common name, so it was not saved. Try again.")
+    notes = []
+    return _Normalize(raw, schema, schema, "", notes), notes
+
+
+# ---------- reference photos (Wikimedia Commons) ----------
+
+def _Text(value):
+    """Plain text from a Commons metadata field (which may hold HTML)."""
+    return html.unescape(re.sub(r"<[^>]+>", "", str(value or ""))).strip()[:200]
+
+
+def _Get(url, timeoutS=15):
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(request, timeout=timeoutS) as response:
+        return response.read()
+
+
+def FetchImages(record):
+    """Download up to MAX_IMAGES reference photos for a profile; returns (images, note). Never raises."""
+    p = record["profile"]
+    known = p["scientificName"] and not p["scientificName"].lower().startswith("unknown")
+    query = p["scientificName"] if known else p["commonName"]
+    params = {"action": "query", "format": "json", "generator": "search", "gsrsearch": f"{query} filetype:bitmap",
+              "gsrnamespace": "6", "gsrlimit": str(MAX_IMAGES * 2), "prop": "imageinfo",
+              "iiprop": "url|mime|extmetadata", "iiurlwidth": str(IMAGE_WIDTH)}
+    folder = Folder(record["slug"]) / "images"
+    try:
+        data = json.loads(_Get(f"{COMMONS_API}?{urllib.parse.urlencode(params)}"))
+    except Exception as err:   # offline, blocked, or Commons changed: the profile still works without photos
+        log.warning("Commons search failed: %r", err)
+        return [], "Couldn't reach Wikimedia Commons for photos; the profile was saved without them."
+    pages = sorted((data.get("query") or {}).get("pages", {}).values(), key=lambda pg: pg.get("index", 0))
+    images = []
+    for page in pages:
+        info = (page.get("imageinfo") or [{}])[0]
+        if info.get("mime") not in ("image/jpeg", "image/png") or not info.get("thumburl"):
+            continue
+        meta = info.get("extmetadata") or {}
+        name = f"{len(images) + 1:02d}{'.png' if info['mime'] == 'image/png' else '.jpg'}"
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / name).write_bytes(_Get(info["thumburl"]))
+        except Exception as err:
+            log.warning("Photo download failed: %r", err)
+            continue
+        images.append({"file": name, "title": _Text(page.get("title", "")).removeprefix("File:"),
+                       "author": _Text((meta.get("Artist") or {}).get("value")) or "unknown",
+                       "license": _Text((meta.get("LicenseShortName") or {}).get("value")) or "see source",
+                       "source": info.get("descriptionurl", "")})
+        if len(images) == MAX_IMAGES:
+            break
+    note = "" if images else f"Wikimedia Commons had no photos for \"{query}\"."
+    return images, note
+
+
+# ---------- the profile in an analysis prompt ----------
+
+def _R(r, unit=""):
+    lo, hi = r["min"], r["max"]
+    fmt = lambda v: f"{v:g}"
+    return f"{fmt(lo)}{unit}" if lo == hi else f"{fmt(lo)}-{fmt(hi)}{unit}"
+
+
+def PromptText(record):
+    """The profile as plain text for the CONTEXT chunk of an analysis."""
+    p = record["profile"]
+    t = p["temperaturesF"]
+    lines = [
+        f"{p['commonName']} ({p['scientificName']}): {p['animalType']}, {p['habitat']}, {p['activityPattern']}.",
+        p["summary"],
+        f"Temperatures (F): hot side {_R(t['hotSide'])}, cold side {_R(t['coldSide'])}, basking {_R(t['basking'])}, night {_R(t['night'])}. "
+        f"Humidity {_R(p['humidityPercent'], '%')}. UVB: {p['uvb']}",
+        f"Adult size: {_R(p['adultSize']['lengthCm'], ' cm')}, {_R(p['adultSize']['weightG'], ' g')}.",
+        "Feeding: " + "; ".join(f"{f['stage']} every {_R(f['intervalDays'], ' days')}" for f in p["feeding"]) + f". Diet: {p['diet']}",
+        f"Droppings: about every {_R(p['droppings']['intervalDays'], ' days')}. {p['droppings']['notes']}",
+        f"Shedding: {p['shedding']['type']}, about every {_R(p['shedding']['intervalDays'], ' days')}. Signs: {p['shedding']['signs']}",
+        "Activities a camera can see: " + ", ".join(p["observableActivities"]) + ".",
+        f"Body condition. Healthy: {p['bodyCondition']['healthy']} Underweight: {p['bodyCondition']['underweight']} "
+        f"Overweight: {p['bodyCondition']['overweight']}",
+        "Conditions to watch for (visible signs):",
+        *[f"- {c['name']} [{c['urgency']}]: {'; '.join(c['visibleSigns'])}" for c in p["conditions"]],
+        "Hazards:",
+        *[f"- {h['name']}: {h['description']}" for h in p["hazards"]],
+    ]
+    if record.get("edited"):
+        lines.append("(This profile was checked and edited by the keeper.)")
+    return "\n".join(line for line in lines if line)

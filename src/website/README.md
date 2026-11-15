@@ -28,6 +28,15 @@ Open http://127.0.0.1:5000.
 
 The dashboard shows lizards 2 per row, compact (name, alerts, video). Clicking a name opens that lizard to full width; clicking it again closes it. Open, a lizard's video has a full-screen button (Esc exits), and the AI analysis panel has **Analyze**: the last 15 min to 6 h, ending now, sent with the provider in use and the image count set under AI polling. No dev mode needed.
 
+## Research tab: species profiles
+
+Type a species in plain English ("crested gecko", "red-eared slider"). One call to the AI provider in use fills `prompts/profile-schema.json`: temperatures, humidity, UVB, size, lifespan, diet and feeding, droppings, shedding, what a camera can see, body condition, common conditions with their visible signs, and hazards. Up to 6 reference photos come from Wikimedia Commons, with author and licence.
+
+- Saved in `research/<slug>/profile.json` (committed, shared by both modes); photos in `research/<slug>/images/` (git-ignored).
+- A lizard whose species matches a profile (typed, common or scientific name) gets it in every analysis prompt, and its live sensor readings are checked against it: each side's temperature against its range, humidity as the average of both sides. Out-of-range readings turn red and become alerts.
+- Profiles are AI-written: check them. **Edit** (the JSON) marks a profile as checked; **Regenerate** replaces it; **Delete** removes it and its photos.
+- Works with Claude and the Mock (a labelled placeholder); not with Gemini yet.
+
 ## Folders (per mode, under `data/<mode>/`)
 
 | Path | What |
@@ -39,7 +48,7 @@ The dashboard shows lizards 2 per row, compact (name, alerts, video). Clicking a
 | `reptiles/<id>/analyses.json` | AI results, newest last (git-ignored). |
 | `reptiles/<id>/prompts/<bundle>/` | Generated prompt bundles for inspection (git-ignored). |
 
-Shared: `data/defaults/sensors/*.json` (default sensor files, committed, available in every mode; an upload can't take a default's name), `prompts/` (every prompt format, see its README), `research/<species>.json` (species reference for the context chunk, empty for now), `tools/make_samples.py` (regenerates the toy videos and the default sensors; `--sensors-only` skips the videos).
+Shared: `research/<slug>/` (species profiles, see above), `data/defaults/sensors/*.json` (default sensor files, committed, available in every mode; an upload can't take a default's name), `prompts/` (every prompt format, see its README), `tools/make_samples.py` (regenerates the toy videos and the default sensors; `--sensors-only` skips the videos).
 
 `data/toy/reptiles/<id>/data.json` is the earlier sample format and is no longer read.
 

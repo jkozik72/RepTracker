@@ -125,6 +125,40 @@ def test_ai_provider():
     return jsonify(main.TestProvider())
 
 
+# ---------- species profiles (Research tab; shared by every mode) ----------
+
+@app.get("/api/research")
+def list_profiles():
+    return jsonify(main.ListProfiles())
+
+
+@app.post("/api/research")
+def create_profile():
+    body = request.get_json(force=True) or {}
+    return jsonify(main.CreateProfile(body.get("species"), bool(body.get("regenerate")))), 201
+
+
+@app.get("/api/research/<slug>")
+def get_profile(slug):
+    return jsonify(main.GetProfile(slug))
+
+
+@app.put("/api/research/<slug>")
+def update_profile(slug):
+    body = request.get_json(force=True) or {}
+    return jsonify(main.UpdateProfile(slug, body.get("profile")))
+
+
+@app.delete("/api/research/<slug>")
+def delete_profile(slug):
+    return jsonify(main.DeleteProfile(slug))
+
+
+@app.get("/research/<slug>/images/<name>")
+def profile_image(slug, name):
+    return send_from_directory(main.research.Folder(slug) / "images", name)
+
+
 # ---------- prompts and AI ----------
 
 @app.post("/api/<mode>/lizards/<lizard_id>/prompts")

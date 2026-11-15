@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RepTracker species profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["commonName", "scientificName", "animalType", "activityPattern", "habitat", "summary", "adultSize", "lifespanYears",
+               "temperaturesF", "humidityPercent", "uvb", "diet", "feeding", "droppings", "shedding", "observableActivities",
+               "bodyCondition", "conditions", "hazards", "husbandryNotes", "confidence"],
+  "properties": {
+    "commonName": {"type": "string", "description": "the usual English name"},
+    "scientificName": {"type": "string", "description": "genus and species; \"unknown\" if the request is too vague"},
+    "animalType": {"enum": ["lizard", "snake", "turtle", "tortoise", "frog", "toad", "salamander", "crocodilian", "other"]},
+    "activityPattern": {"enum": ["diurnal", "nocturnal", "crepuscular", "cathemeral"]},
+    "habitat": {"enum": ["terrestrial", "arboreal", "semi-aquatic", "aquatic", "fossorial"]},
+    "summary": {"type": "string", "description": "two or three sentences for a keeper"},
+    "adultSize": {
+      "type": "object", "additionalProperties": false, "required": ["lengthCm", "weightG"],
+      "properties": {"lengthCm": {"$ref": "#/$defs/range"}, "weightG": {"$ref": "#/$defs/range"}}
+    },
+    "lifespanYears": {"$ref": "#/$defs/range"},
+    "temperaturesF": {
+      "type": "object", "additionalProperties": false, "required": ["hotSide", "coldSide", "night", "basking"],
+      "description": "air temperatures in degrees Fahrenheit; basking is the surface under the heat source",
+      "properties": {"hotSide": {"$ref": "#/$defs/range"}, "coldSide": {"$ref": "#/$defs/range"},
+                     "night": {"$ref": "#/$defs/range"}, "basking": {"$ref": "#/$defs/range"}}
+    },
+    "humidityPercent": {"$ref": "#/$defs/range"},
+    "uvb": {"type": "string", "description": "whether UVB is needed and at what strength"},
+    "diet": {"type": "string"},
+    "feeding": {
+      "type": "array", "description": "one entry per life stage",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["stage", "intervalDays", "notes"],
+        "properties": {"stage": {"enum": ["hatchling", "juvenile", "adult"]}, "intervalDays": {"$ref": "#/$defs/range"},
+                       "notes": {"type": "string"}}
+      }
+    },
+    "droppings": {
+      "type": "object", "additionalProperties": false, "required": ["intervalDays", "notes"],
+      "properties": {"intervalDays": {"$ref": "#/$defs/range"}, "notes": {"type": "string", "description": "what normal droppings look like"}}
+    },
+    "shedding": {
+      "type": "object", "additionalProperties": false, "required": ["type", "intervalDays", "signs"],
+      "properties": {"type": {"enum": ["whole", "patches", "scutes", "continuous", "none"]},
+                     "intervalDays": {"$ref": "#/$defs/range"}, "signs": {"type": "string", "description": "how an upcoming shed looks"}}
+    },
+    "observableActivities": {
+      "type": "array", "items": {"type": "string"},
+      "description": "behaviours a fixed enclosure camera can see, for example basking, hiding, climbing, swimming, soaking, burrowed"
+    },
+    "bodyCondition": {
+      "type": "object", "additionalProperties": false, "required": ["healthy", "underweight", "overweight"],
+      "properties": {"healthy": {"type": "string"}, "underweight": {"type": "string"}, "overweight": {"type": "string"}}
+    },
+    "conditions": {
+      "type": "array", "description": "common diseases and health problems of this species in captivity",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["name", "visibleSigns", "urgency", "notes"],
+        "properties": {"name": {"type": "string"},
+                       "visibleSigns": {"type": "array", "items": {"type": "string"}, "description": "signs a camera could show"},
+                       "urgency": {"enum": ["monitor", "vet soon", "emergency"]},
+                       "notes": {"type": "string"}}
+      }
+    },
+    "hazards": {
+      "type": "array", "description": "enclosure set-ups or conditions that are dangerous for this species",
+      "items": {"type": "object", "additionalProperties": false, "required": ["name", "description"],
+                "properties": {"name": {"type": "string"}, "description": {"type": "string"}}}
+    },
+    "husbandryNotes": {"type": "string"},
+    "confidence": {"type": "string", "description": "how sure the profile is, and anything a keeper should double-check with a vet or a care sheet"}
+  },
+  "$defs": {
+    "range": {"type": "object", "additionalProperties": false, "required": ["min", "max"],
+              "properties": {"min": {"type": "number"}, "max": {"type": "number"}}}
+  }
+}

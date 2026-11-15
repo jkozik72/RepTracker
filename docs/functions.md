@@ -68,6 +68,9 @@ Every function that touches lizard data takes `mode` first: `toy` or `main`, eac
 | `LizardConfigFromForm` | Validates the add/edit-lizard form into a config (name, species, width, camera, sensors) | mode, form dict, createdAt → config |
 | `UpdateLizard` | Edits a lizard: new config from the form; keeps its id, `createdAt` and analyses; renames it in `reptiles.json` | mode, id, form dict → `{id, config, latest}` |
 | `DeleteVideo` | Deletes an uploaded camera video for good; refuses the committed samples and a video a lizard still uses | mode, name → same as `ListMedia` |
+| `ProfileBrief` | A lizard's species profile as the dashboard needs it: name and the ranges for sensor alerts | species text → dict or None |
+| `CreateProfile` | Researches a species with the provider in use (`RESEARCHERS`), checks the reply, fetches photos, saves it; refuses a duplicate unless regenerating | species, regenerate → record with `usedBy` |
+| `UpdateProfile` / `DeleteProfile` / `GetProfile` / `ListProfiles` | A keeper's edit (marks it checked); delete with its photos; one profile; all profiles, each with the animals that use it | |
 | `RemoveLizard` | Takes a lizard off `reptiles.json`; its folder stays | mode, id → none |
 | `ListLizards` | Every listed lizard with its config and latest analysis | mode → list |
 | `ListMedia` | Video and sensor file names without extension; sensors include the defaults | mode → `{videos, sensors, defaultSensors}` |
@@ -119,6 +122,21 @@ The Gemini provider being tried (Q11): Gemini through Vertex AI, signed in with 
 | `FrameLabels` | Timestamp labels of a bundle's images, in the order sent | manifest → list |
 | `Explain` | Turns an error from the Google libraries into an `AiError` a keeper can act on | exception, time limit in s → `AiError` |
 
+### `src/website/research.py`
+
+Species profiles (D5): storage, schema checks, photos and prompt text. No AI calls (main.py makes them). Source: `docs/notes/2026-11-15-species-profiles-chat.md`.
+
+| Function | Does | In → out |
+|---|---|---|
+| `Slug` | A safe folder name from a species name | text → slug |
+| `FindRecord` | The profile for a species as typed: matches the typed name, common name or scientific name | species text → record or None |
+| `ListRecords` / `ReadRecord` / `WriteRecord` | All profiles; one profile; save one (`research/<slug>/profile.json`) | → records / slug → record / record → none |
+| `NewRecord` | A record around a profile: species as typed, slug, time, provider, model | species, profile, provider, model → record |
+| `NormalizeProfile` | Forces an AI reply or a keeper's edit into `prompts/profile-schema.json`: off-list enums become "other" (or the last option), non-numbers 0, backwards ranges swapped; refuses a profile with no common name | dict → (profile, notes) |
+| `FetchImages` | Up to 6 reference photos from Wikimedia Commons (search by scientific name), saved with author, licence and source; never raises | record → (images, note) |
+| `PromptText` | The profile as plain text for the CONTEXT chunk | record → text |
+| `Summary` | What the Research list shows for a profile | record → dict |
+
 ### `src/website/claude_ai.py`
 
 The Claude provider (D4): the Claude API through the `anthropic` package, imported only when Claude is used. Source: `docs/notes/2026-11-15-claude-provider-chat.md`. Reuses `ParseJson`, `NormalizeResult` and `FrameLabels` from `ai.py`. One analysis is one request (`max_retries=0`); refusals go to Anthropic's server-side fallback (`fallbacks: "default"`). Every failure leaves this file as `AiError` with one sentence for the dashboard.
@@ -137,6 +155,7 @@ The Claude provider (D4): the Claude API through the `anthropic` package, import
 | `BuildAnalysisRequest` | A bundle as one request: `system.txt` as the system prompt; one user turn with each chunk's PDF then text; reply constrained to the schema. Refuses over 30 MB or 600 PDF pages | folder, manifest, schema → keyword arguments for `beta.messages.create` |
 | `AnalyzeBundle` | Sends one bundle in one call and returns the normalized result | folder, manifest, config, schema → schema-shaped result plus `_details`: `{model, seconds, tokens, notes}` |
 | `Answer` | Sends a keeper's question (effort `low`), with the camera picture first when vision is on | prompt text, JPEG bytes or None → answer text |
+| `Research` | Writes a species profile: `research.txt` in, a dict shaped like `profile-schema.json` out (structured outputs) | prompt, schema → (profile, details) |
 | `Ping` | One tiny request that proves the key and model | none → a sentence with the time taken in s |
 | `ReadReply` | The reply's text; `AiError` if refused, cut off or empty | response → text |
 | `Explain` | Turns an `anthropic` error into an `AiError` a keeper can act on | exception, time limit in s → `AiError` |
@@ -149,6 +168,9 @@ The Claude provider (D4): the Claude API through the `anthropic` package, import
 | `loadMode` | Loads the current mode's media and lizards and redraws everything |
 | `renderVideoBox` | The camera video with its time and source labels; in the expanded card, a full-screen button (the browser's Fullscreen API) |
 | `openEdit` | Opens the add-lizard form filled in with a lizard's settings, to save changes to it |
+| `checkSensorRanges` | Live sensor readings against the lizard's species profile: temperatures per side, humidity as the average of both sides; out-of-range values turn red and become alerts | lizard, now → none |
+| `loadProfiles` / `showProfile` / `renderProfile` | The Research tab: the profile list, and one profile with photos, husbandry facts, conditions, hazards, and Edit / Regenerate / Delete | |
+| `speciesHint` | Under the species field: whether the typed species has a profile | |
 | `toggleExpand` | Opens a lizard from compact to full width, or closes it |
 | `positionScale` | Client-side twin of `PositionScale`: the position chart's unit and maximum |
 | `loadAi` | Loads the AI provider status on its own, so a slow check never delays the lizards: at start, when Settings opens, after a test or a refused switch |
