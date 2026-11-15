@@ -122,6 +122,38 @@ def system_action(action):
     return jsonify(system.Run(action, body.get("branch"), bool(body.get("deleteData"))))
 
 
+# ---------- open on a phone: this server's addresses on the network, and a QR code ----------
+
+def PhoneLinks():
+    """The addresses a phone on the same network can open: IP addresses first (Android often can't look up
+    .local names), then name.local. Empty when the server only listens on this computer (no --lan)."""
+    port = app.config.get("LAN_PORT")
+    if not port:
+        return {"lan": False, "links": []}
+    suffix = "" if port == 443 else f":{port}"
+    links = [{"url": f"https://{a}{suffix}", "label": a + (" (Tailscale)" if a.startswith("100.") else "")}
+             for a in sorted(auth.LanAddresses(), key=lambda a: a.startswith("100."))]
+    links += [{"url": f"https://{n}{suffix}", "label": f"{n} (not on every Android phone)"} for n in auth.HostNames() if n.endswith(".local")]
+    return {"lan": True, "links": links}
+
+
+@app.get("/api/phone")
+def phone_links():
+    return jsonify(PhoneLinks())
+
+
+@app.get("/api/phone/qr.svg")
+def phone_qr():
+    import io
+    import segno
+    url = request.args.get("url", "")
+    if url not in [l["url"] for l in PhoneLinks()["links"]]:
+        return jsonify({"error": "Not one of this server's addresses."}), 404
+    out = io.BytesIO()
+    segno.make(url, error="m").save(out, kind="svg", scale=6, border=2, dark="#000", light="#fff", xmldecl=False)
+    return app.response_class(out.getvalue(), mimetype="image/svg+xml")
+
+
 @app.route("/")
 def home():
     return render_template("index.html")
@@ -310,13 +342,15 @@ def send_prompts(mode, lizard_id, bundle_id):
 @app.post("/api/<mode>/lizards/<lizard_id>/ask")
 def ask(mode, lizard_id):
     body = request.get_json(force=True) or {}
-    return jsonify(main.AskQuestion(mode, lizard_id, body.get("question"), body.get("now"), bool(body.get("vision", True))))
+    return jsonify(main.AskQuestion(mode, lizard_id, body.get("question"), body.get("now"), bool(body.get("vision", True)),
+                                    body.get("photo")))
 
 
 def ServeLan(port, redirectPort):
     """The LAN server: cheroot (a production WSGI server) over HTTPS, and optionally a plain-HTTP port that
     only redirects to HTTPS, so typing reptracker.local works. Falls back to Flask's server without cheroot."""
     app.config["SESSION_COOKIE_SECURE"] = True
+    app.config["LAN_PORT"] = port
     cert, key = auth.Certificate()
     suffix = "" if port == 443 else f":{port}"
     print("RepTracker on your network (HTTPS; the browser warns once about the self-signed certificate):")

@@ -157,6 +157,36 @@ class UploadTest(unittest.TestCase):
         self.assertEqual([p.name for p in main.DATA.rglob("*") if p.is_file()], [])
 
 
+class AskPhotoTest(unittest.TestCase):
+    """A photo the keeper takes or attaches replaces the camera picture sent with a question."""
+
+    def test_photo_is_shrunk_turned_to_jpeg_and_bad_files_refused(self):
+        import base64, io
+        from PIL import Image
+        buf = io.BytesIO(); Image.new("RGBA", (4000, 3000), (200, 100, 50, 255)).save(buf, "PNG")
+        out = main.KeeperPhoto("data:image/png;base64," + base64.b64encode(buf.getvalue()).decode())
+        picture = Image.open(io.BytesIO(out))
+        self.assertEqual((picture.format, picture.size), ("JPEG", (1568, 1176)))
+        for bad in ("data:text/plain;base64,aGk=", "data:image/png;base64,bm90IGFuIGltYWdl", "x" * (main.MAX_PHOTO_BYTES + 1)):
+            with self.assertRaises(main.RepTrackerError):
+                main.KeeperPhoto(bad)
+
+    def test_ask_sends_the_photo_instead_of_the_camera_picture(self):
+        import base64, io
+        from PIL import Image
+        buf = io.BytesIO(); Image.new("RGB", (40, 30)).save(buf, "PNG")
+        photo = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+        sent = {}
+        def asker(prompt, latest, sensors, image):
+            sent.update(prompt=prompt, image=image); return "ok"
+        with mock.patch.object(main, "LoadConfig", return_value={"name": "Rex", "species": "x"}),              mock.patch.object(main, "ReadJson", return_value=[]), mock.patch.object(main, "SensorsNow", return_value="none"),              mock.patch.object(main, "CurrentPicture") as camera, mock.patch.object(main, "CurrentProvider", return_value="mock"),              mock.patch.dict(main.ASKERS, {"mock": asker}):
+            reply = main.AskQuestion("toy", "rex", "How is he?", "2026-11-15T08:00:00Z", True, photo)
+        camera.assert_not_called()
+        self.assertEqual(reply["imageSource"], "photo")
+        self.assertIn("photo the keeper took", sent["prompt"])
+        self.assertEqual(sent["image"][:2], bytes([0xFF, 0xD8]))   # JPEG
+
+
 class SensorDataTest(unittest.TestCase):
     def test_patterns_stay_in_go_under_go_over_or_vary(self):
         def outside(pattern):
