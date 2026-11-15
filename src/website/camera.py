@@ -49,6 +49,7 @@ MAX_BUFFER = 20 * 1024 * 1024
 _lock = threading.Lock()
 _stop = threading.Event()
 _restart = threading.Event()
+_newFrame = threading.Condition()   # notified on every frame, for the live stream
 _state = {"device": "off", "running": False, "lastFrameAt": None, "error": None}
 _latest = None            # (time, jpeg bytes)
 _child = None
@@ -220,6 +221,14 @@ def LatestFrame():
     return _latest
 
 
+def WaitForFrame(after=None, timeout=10):
+    """Block until there is a frame newer than the one taken at `after`; returns (time, jpeg) or None on timeout."""
+    with _newFrame:
+        if _newFrame.wait_for(lambda: _latest is not None and _latest[0] != after, timeout):
+            return _latest
+    return None
+
+
 def PruneFrames(now=None):
     """Delete stored frames older than KEEP_HOURS, and empty day folders."""
     cutoff = (now or _Now()) - timedelta(hours=KEEP_HOURS)
@@ -270,7 +279,9 @@ def _SetState(**kw):
 def _OnFrame(jpeg, onSaved=None):
     global _latest, _lastFrameMono
     t = _Now()
-    _latest = (t, jpeg)
+    with _newFrame:
+        _latest = (t, jpeg)
+        _newFrame.notify_all()
     _lastFrameMono = time.monotonic()
     _SetState(running=True, lastFrameAt=_Iso(t))
     try:

@@ -277,6 +277,23 @@ def camera_settings():
     return jsonify(camera.CameraStatus())
 
 
+@app.get("/media/camera/stream")
+def camera_stream():
+    """The live camera as an MJPEG stream (multipart/x-mixed-replace): every frame is pushed as the camera makes
+    it, so an <img> shows the camera's full frame rate without a request per picture. Ends after 10 s without a
+    frame; the page then starts it again."""
+    def Frames():
+        last = None
+        while True:
+            frame = camera.WaitForFrame(last, timeout=10)
+            if frame is None:
+                return
+            last = frame[0]
+            yield b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n%s\r\n" % (len(frame[1]), frame[1])
+    return app.response_class(Frames(), mimetype="multipart/x-mixed-replace; boundary=frame",
+                              headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+
 @app.get("/media/camera/picture")
 def camera_picture():
     """The live camera's picture as JPEG: the newest frame (if under camera.FRESH_S old), or with ?t=<ISO time>

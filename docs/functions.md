@@ -126,6 +126,7 @@ The live camera, one per computer. Source: `docs/notes/2026-11-15-live-camera-ch
 | `SaveFrame` | Stores a frame as its 10 s slot's picture if the slot has none (`.part`, fsync, rename) | time, jpeg → bool |
 | `FrameCandidates` / `FrameAt` | Stored frames nearest a time within 30 s, nearest first; empty files skipped | time → (frameTime, path) / None |
 | `LatestFrame` | The newest frame, in memory | → (time, jpeg) / None |
+| `WaitForFrame` | Waits for a frame newer than a given one; feeds the MJPEG stream `/media/camera/stream` | time, timeout s → (time, jpeg) / None |
 | `PruneFrames` | Deletes frames older than 72 h (`KEEP_HOURS`) | now → none |
 | `CameraStatus` | Device, running, last frame time, error, retention, server time, picture settings | → dict |
 | `CameraSettings` / `CheckSettings` / `SaveCameraSettings` | The picture settings (frame rate, focus, exposure, white balance, brightness, contrast) in `data/camera/settings.json`: read with defaults, validate, save and restart capture | dict → dict |

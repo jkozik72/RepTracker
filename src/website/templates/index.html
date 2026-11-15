@@ -1408,11 +1408,44 @@ $("#lizards").addEventListener("change", e => {
 // The live camera: an <img> that loads one picture at a time. At real time it shows the newest frame, about
 // 5 a second; when the dev clock is paused or off real time, the stored frame for the clock (10 s slots).
 // Every request carries a new &n= so the browser never reuses an earlier picture.
-let liveRequests = 0, liveFps = 5;   // liveFps: the camera's frame rate, from /api/camera
-fetch("/api/camera").then(r => r.ok ? r.json() : null).then(st => { if (st?.settings) liveFps = st.settings.frameRate; }).catch(() => {});
+// At real time the <img> shows /media/camera/stream: the Pi pushes every frame (MJPEG), so the picture runs at
+// the camera's frame rate. The camera's status, polled every 2 s, says whether frames are arriving; when they
+// stop, the stream is closed and the cover says so, and it starts again when they come back.
+let liveRequests = 0, liveFps = 5, liveStatus = null;
+function refreshLiveStatus() {
+  fetch("/api/camera").then(r => r.ok ? r.json() : null).then(st => {
+    if (!st) return;
+    liveStatus = { ...st, receivedAt: Date.now() };
+    if (st.settings) liveFps = st.settings.frameRate;
+  }).catch(() => {});
+}
+refreshLiveStatus(); setInterval(refreshLiveStatus, 2000);
+function liveIsFresh() {
+  return !!(liveStatus?.lastFrameAt && Date.now() - liveStatus.receivedAt < 6000
+            && Date.parse(liveStatus.serverTime) - Date.parse(liveStatus.lastFrameAt) < 5000);
+}
+function startStream(img, cover) {
+  img.dataset.mode = "stream"; img.dataset.real = "1";
+  img.onload = () => { img.dataset.ok = "1"; if (cover) cover.hidden = true; };
+  img.onerror = () => { stopStream(img); img.dataset.next = Date.now() + 2000; };
+  img.src = `/media/camera/stream?n=${++liveRequests}`;
+}
+function stopStream(img) {
+  img.onload = img.onerror = null; img.removeAttribute("src"); img.dataset.mode = ""; img.dataset.ok = "0";
+}
 function syncLive(img, cover, now, speed) {
   if (img.dataset.busy === "1" || +(img.dataset.next || 0) > Date.now()) return;
   const real = speed === 1 && now > Date.now() - 15000;   // running, and not set back into the past
+  if (real) {
+    if (!liveIsFresh()) {
+      if (img.dataset.mode === "stream") stopStream(img);
+      cover.hidden = false; cover.textContent = liveStatus?.error || "No picture from the live camera right now";
+      return;
+    }
+    if (img.dataset.mode !== "stream") startStream(img, cover);
+    return;
+  }
+  if (img.dataset.mode === "stream") stopStream(img);
   const slot = real ? "now" : new Date(Math.floor(now / 10000) * 10000).toISOString().replace(/\.\d+Z$/, "Z");
   if (!real && img.dataset.slot === slot) return;          // paused or replaying: only when the slot changes
   img.dataset.busy = "1"; img.dataset.slot = slot;
@@ -1451,7 +1484,10 @@ setInterval(() => tick(false), 250);
 setInterval(() => {
   const now = simNow(), speed = clockSpeed();
   document.querySelectorAll("img[data-live]").forEach(img => {
-    if (!img.offsetParent && !document.fullscreenElement?.contains(img)) return;   // the card's hidden view
+    if (!img.offsetParent && !document.fullscreenElement?.contains(img)) {         // the card's hidden view
+      if (img.dataset.mode === "stream") stopStream(img);
+      return;
+    }
     try { syncLive(img, img.parentElement.querySelector("[data-cover]"), now, speed); } catch (err) { console.error(err); }
   });
 }, 30);
@@ -1723,19 +1759,19 @@ $("#cam-apply").addEventListener("click", async () => {
   btn.disabled = false;
 });
 // The preview: the newest picture, about 3 a second, while the form shows the camera settings.
-let camPreviewN = 0;
-(function previewLoop() {
+// The preview in the form: the same live stream, while the form shows the camera settings.
+setInterval(() => {
   const box = $("#cam-preview"), shown = !addForm.hidden && addForm.elements.source.value === "live";
-  if (!shown) return setTimeout(previewLoop, 500);
-  fetch(`/media/camera/picture?n=${++camPreviewN}`).then(async r => {
-    if (!r.ok) throw new Error(r.status);
-    let img = box.querySelector("img");
-    if (!img) { box.innerHTML = `<img alt="Camera preview">`; img = box.querySelector("img"); }
-    const url = URL.createObjectURL(await r.blob()), old = img.src;
-    img.src = url; if (old.startsWith("blob:")) URL.revokeObjectURL(old);
-    setTimeout(previewLoop, Math.max(30, 1000 / liveFps - 20));
-  }).catch(() => { box.innerHTML = "<span>No picture from the camera right now</span>"; setTimeout(previewLoop, 1000); });
-})();
+  let img = box.querySelector("img");
+  if (!shown || !liveIsFresh()) {
+    if (img) stopStream(img);
+    const text = shown ? (liveStatus?.error || "No picture from the camera right now") : "Waiting for the camera…";
+    if (box.textContent !== text) box.innerHTML = `<span>${esc(text)}</span>`;
+    return;
+  }
+  if (!img) { box.innerHTML = `<img alt="Camera preview">`; img = box.querySelector("img"); }
+  if (img.dataset.mode !== "stream") startStream(img, null);
+}, 500);
 // Adding (or editing to) a species with no profile researches it first, so the animal's card starts from its
 // profile. If research fails, nothing is added; "Add without a profile" goes ahead anyway.
 let skipResearch = false;

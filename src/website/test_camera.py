@@ -167,6 +167,20 @@ class LiveLizardTest(unittest.TestCase):
         self.assertEqual(main.LizardConfigFromForm("toy", form, "2026-11-14T00:00:00Z")["camera"], {"view": "side", "video": "v"})
 
 
+class StreamTest(unittest.TestCase):
+    def test_wait_for_frame(self):
+        import threading
+        first = (datetime.now(timezone.utc), Jpeg())
+        with mock.patch.object(camera, "_latest", first):
+            self.assertEqual(camera.WaitForFrame(None, timeout=0.1), first)       # a frame already there
+            self.assertIsNone(camera.WaitForFrame(first[0], timeout=0.1))          # nothing newer
+            threading.Timer(0.1, camera._OnFrame, args=(Jpeg((9, 9, 9)),)).start()
+            with mock.patch.object(camera, "SaveFrame", return_value=False):
+                newer = camera.WaitForFrame(first[0], timeout=2)
+            self.assertIsNotNone(newer)
+            self.assertNotEqual(newer[0], first[0])
+
+
 class CameraSettingsTest(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
