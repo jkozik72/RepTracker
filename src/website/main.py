@@ -16,6 +16,7 @@ import io
 import json
 import math
 import re
+import secrets
 import shutil
 import statistics
 import subprocess
@@ -996,7 +997,7 @@ def AddFeeding(mode, lizardId, form):
     food = " ".join(str(form.get("food") or "").split())[:80]
     if not food:
         raise RepTrackerError("Feeding: say what was fed (for example \"3 crickets\").")
-    entry = {"id": datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f"), "time": when, "food": food,
+    entry = {"id": secrets.token_hex(6), "time": when, "food": food,
              "amount": " ".join(str(form.get("amount") or "").split())[:40],
              "notes": " ".join(str(form.get("notes") or "").split())[:200]}
     path = _FeedingPath(mode, lizardId)
