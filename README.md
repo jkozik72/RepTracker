@@ -1,8 +1,8 @@
 # RepTracker
 
-A motion-tracking project. What RepTracker tracks, for whom, and on what input is still being written down: see [open questions](docs/open-questions.md) Q1–Q5 and the [overview](docs/overview.md).
+A dashboard for keeping track of your reptiles, hosted on a single computer as a local website. For each lizard it shows a video, a movement graph, statistics, and a status with alerts from an AI model that analyzes frames of the video. Video and sensor data are recorded files, not live hardware. What it must do, with sources: the [overview](docs/overview.md).
 
-**Status:** TBD. No code yet; language and tooling are undecided (Q2).
+**Status:** design. No code yet. Language and tooling are undecided (Q2), and so is the motion-tracking approach (Q8): see [open questions](docs/open-questions.md).
 
 ## Project docs
 
