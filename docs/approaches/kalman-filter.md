@@ -2,7 +2,7 @@
 
 - **Status:** Candidate
 - **Decision:** none yet
-- **Open questions:** Q6, Q7, Q8
+- **Open questions:** Q8, Q9, Q10
 - **Lives in:** n/a
 
 ## What it is
@@ -24,7 +24,7 @@ A recursive estimator that tracks a state, here the lizard's position and veloci
 
 ## Cons
 
-- One Gaussian estimate cannot say "either here or gone", so it does not answer lizard present by itself (Q8).
+- One Gaussian estimate cannot say "either here or gone", so it does not answer lizard present by itself (Q10).
 - With predictions only, the estimate keeps moving at the last velocity. A still lizard and an absent lizard look the same to it.
 - Its noise parameters have to be tuned to our video.
 

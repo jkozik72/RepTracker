@@ -2,7 +2,7 @@
 
 A dashboard for keeping track of your reptiles, hosted on a single computer as a local website. For each lizard it shows a video, a movement graph, statistics, and a status with alerts from an AI model that analyzes frames of the video. Video and sensor data are recorded files, not live hardware. What it must do, with sources: the [overview](docs/overview.md).
 
-**Status:** design. No code yet. Language and tooling are undecided (Q2), and so is the motion-tracking approach (Q6): see [open questions](docs/open-questions.md).
+**Status:** design. No code yet. Language and tooling are undecided (Q2), and so is the motion-tracking approach (Q8): see [open questions](docs/open-questions.md).
 
 ## Project docs
 

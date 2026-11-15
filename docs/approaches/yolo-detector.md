@@ -2,7 +2,7 @@
 
 - **Status:** Candidate
 - **Decision:** none yet
-- **Open questions:** Q6
+- **Open questions:** Q8
 - **Lives in:** n/a
 
 ## What it is

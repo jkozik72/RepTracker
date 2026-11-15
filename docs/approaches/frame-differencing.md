@@ -2,7 +2,7 @@
 
 - **Status:** Candidate
 - **Decision:** none yet
-- **Open questions:** Q6, Q7
+- **Open questions:** Q8, Q9
 - **Lives in:** n/a
 
 ## What it is
@@ -30,7 +30,7 @@ flowchart LR
 
 ## Cons
 
-- A zero difference is ambiguous: it occurs when the frame repeats (Q7), when the lizard is still, and when the lizard is not on screen. Differencing alone cannot tell these apart.
+- A zero difference is ambiguous: it occurs when the frame repeats (Q9), when the lizard is still, and when the lizard is not on screen. Differencing alone cannot tell these apart.
 - Everything that changes counts as motion, not only the lizard: lighting, noise, anything else that moves in the enclosure.
 - It gives where pixels changed, not where the whole lizard is.
 

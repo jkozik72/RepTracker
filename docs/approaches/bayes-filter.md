@@ -2,7 +2,7 @@
 
 - **Status:** Candidate
 - **Decision:** none yet
-- **Open questions:** Q6, Q7, Q8
+- **Open questions:** Q8, Q9, Q10
 - **Lives in:** n/a
 
 ## What it is
@@ -18,7 +18,7 @@ The general recursive estimator: it keeps a probability distribution (a belief) 
 
 ## Pros
 
-- Holds several hypotheses at once, including "not on screen", so lizard present (Q8) can come out of the filter.
+- Holds several hypotheses at once, including "not on screen", so lizard present (Q10) can come out of the filter.
 - No linear or Gaussian assumption.
 
 ## Cons

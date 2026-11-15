@@ -8,7 +8,7 @@ Sources: the 2026-11-14 notes, cited below as [brief](notes/2026-11-14-project-b
 
 ```mermaid
 flowchart LR
-    subgraph IN["Recorded inputs: files, not streams (D2)"]
+    subgraph IN["Recorded inputs: files, not streams (D3)"]
         RAW["Raw video"]
         SEN["Sensor time series"]
     end
@@ -20,8 +20,8 @@ flowchart LR
         BE["Backend"] --- UI["UI: dashboard, add-lizard form, settings"]
     end
     SP["Species, from the add-lizard form"] --> RES["Research: LLM"] --> KB["Structured information per species"]
-    RAW --> MT["Motion tracking (Q6)"] --> OUT
-    RAW -->|"frame"| AI["Image analysis: VLM or LLM (Q9)"]
+    RAW --> MT["Motion tracking (Q8)"] --> OUT
+    RAW -->|"frame"| AI["Image analysis: VLM or LLM (Q11)"]
     SEN --> AI
     ST --> AI
     KB --> AI
@@ -38,17 +38,17 @@ One section per component: purpose, chosen approach (link the approach page and 
 
 **Purpose:** stand in for cameras and sensors.
 
-**Design:** decided ([D2](decisions.md)): video and sensor data are finite files, not streams. The video is one recording the team makes of a real lizard, plus recordings found online of other lizards in their enclosures; the sensors are finite time series ([brief § Inputs][b-inputs]). Cameras are named top and side, and are drawn as files listed in JSON ([board § Add lizard][s-add]).
+**Design:** decided ([D3](decisions.md)): video and sensor data are finite files, not streams. The video is one recording the team makes of a real lizard, plus recordings found online of other lizards in their enclosures; the sensors are finite time series ([brief § Inputs][b-inputs]). Cameras are named top and side, and are drawn as files listed in JSON ([board § Add lizard][s-add]).
 
-**Open:** which videos, in what form ([Q14](open-questions.md)); which sensors, in what file format ([Q13](open-questions.md)); how a finite video maps onto dashboard time ([Q15](open-questions.md)).
+**Open:** which videos, in what form ([Q16](open-questions.md)); which sensors, in what file format ([Q15](open-questions.md)); how a finite video maps onto dashboard time ([Q17](open-questions.md)).
 
 ### Motion tracking
 
 **Purpose:** video in, position of the lizard out ([brief § Motion tracking][b-motion]). The board labels this stage DSP and draws it as raw video to processed video ([board § Motion tracking][s-motion], [§ Design decisions][s-dd]).
 
-**Design:** not decided ([Q6](open-questions.md)). Candidates: [frame differencing](approaches/frame-differencing.md) to detect motion; a [Kalman filter](approaches/kalman-filter.md) or a [Bayes filter](approaches/bayes-filter.md) to track position; a [YOLO detector](approaches/yolo-detector.md) only if those are not enough.
+**Design:** not decided ([Q8](open-questions.md)). Candidates: [frame differencing](approaches/frame-differencing.md) to detect motion; a [Kalman filter](approaches/kalman-filter.md) or a [Bayes filter](approaches/bayes-filter.md) to track position; a [YOLO detector](approaches/yolo-detector.md) only if those are not enough.
 
-**Open:** which pipeline ([Q6](open-questions.md)); repeated frames ([Q7](open-questions.md)).
+**Open:** which pipeline ([Q8](open-questions.md)); repeated frames ([Q9](open-questions.md)).
 
 ### Statistics
 
@@ -56,7 +56,7 @@ One section per component: purpose, chosen approach (link the approach page and 
 
 **Design:** from the processed video: position, speed, lizard present ([brief § Statistics][b-stats]).
 
-**Open:** the full list and its units ([Q11](open-questions.md)); what decides lizard present ([Q8](open-questions.md)).
+**Open:** the full list and its units ([Q13](open-questions.md)); what decides lizard present ([Q10](open-questions.md)).
 
 ### Research
 
@@ -64,7 +64,7 @@ One section per component: purpose, chosen approach (link the approach page and 
 
 **Design:** the species from the add-lizard form goes to an LLM through an API call, preferably with structured output. The result is structured information per species, which the board also calls a knowledge base and research files ([brief § Research and image analysis][b-ai]; [board § AI pipeline][s-ai]).
 
-**Open:** its fields, whether it includes images, where it is stored, whether the UI displays it ([Q12](open-questions.md)); the model ([Q9](open-questions.md)).
+**Open:** its fields, whether it includes images, where it is stored, whether the UI displays it ([Q14](open-questions.md)); the model ([Q11](open-questions.md)).
 
 ### Image analysis
 
@@ -72,7 +72,7 @@ One section per component: purpose, chosen approach (link the approach page and 
 
 **Design:** the backend polls the model at a poll rate, and only if the lizard is present. The model gets a frame of the raw video, sensor values, the statistics, and the research files. It returns a structured report with a status from a finite set, or says the lizard is not in frame; the result is shown in the UI as a human-readable analysis, and flags become alerts ([brief § Research and image analysis][b-ai]; [board § AI pipeline][s-ai], [§ Design decisions][s-dd]). Preferably one AI API call per poll.
 
-**Open:** the model, and whether it must be a VLM ([Q9](open-questions.md)); the poll rate and what decides lizard present ([Q8](open-questions.md)); the statuses and the report's fields ([Q10](open-questions.md)).
+**Open:** the model, and whether it must be a VLM ([Q11](open-questions.md)); the poll rate and what decides lizard present ([Q10](open-questions.md)); the statuses and the report's fields ([Q12](open-questions.md)).
 
 ### Web app
 
@@ -86,7 +86,7 @@ One section per component: purpose, chosen approach (link the approach page and 
 | Add lizard | Lizard: name, age, species, optional previous data. Hardware: cameras (top, side), sensors. | [UI board § Add lizard form][u-form]; [board § Add lizard][s-add] |
 | Settings | Keys. The AI API key is set at runtime and not stored. | [UI board § Settings][u-settings]; [board § Secrets and settings][s-secrets] |
 
-**Open:** "previous data" and "AI questions" ([Q17](open-questions.md)); whether research results are displayed ([Q12](open-questions.md)).
+**Open:** "previous data" and "AI questions" ([Q19](open-questions.md)); whether research results are displayed ([Q14](open-questions.md)).
 
 [b-ai]: notes/2026-11-14-project-brief.md#research-and-image-analysis
 [b-stats]: notes/2026-11-14-project-brief.md#statistics
