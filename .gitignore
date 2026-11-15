@@ -27,3 +27,10 @@ src/website/data/*/reptiles/*/analyses.json
 
 # Main-mode data is the keeper's own (uploads, lizards); only toy-mode samples are committed
 src/website/data/main/
+
+# Videos uploaded into Toy mode stay local (large, and often not ours to publish);
+# only the generated samples from tools/make_samples.py are committed
+src/website/data/toy/media/videos/*
+!src/website/data/toy/media/videos/gecko-top.mp4
+!src/website/data/toy/media/videos/skink-side.mp4
+!src/website/data/toy/media/videos/short-clip-top.mp4
