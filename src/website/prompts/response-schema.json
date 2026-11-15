@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RepTracker analysis",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["Weight", "Shed", "Food in bowl", "Current activity", "Hazardous conditions", "Movement Data", "Analysis"],
+  "properties": {
+    "Weight": {"enum": ["obese", "overweight", "healthy", "underweight", "emaciated", "can't see lizard"]},
+    "Shed": {"enum": ["soon", "now", "not shedding", "can't see lizard"]},
+    "Food in bowl": {"enum": ["true", "false", "no bowl visible"]},
+    "Current activity": {"enum": ["basking", "exploring", "hiding", "can't see lizard"]},
+    "Hazardous conditions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Improper substrate", "Unsafe lighting", "Temperature too high", "Temperature too low", "Humidity too high", "Signs of disease", "Other"],
+      "properties": {
+        "Improper substrate": {"type": "boolean"},
+        "Unsafe lighting": {"type": "boolean"},
+        "Temperature too high": {"type": "boolean"},
+        "Temperature too low": {"type": "boolean"},
+        "Humidity too high": {"type": "boolean"},
+        "Signs of disease": {"type": "string", "description": "\"none\", or describe the illness"},
+        "Other": {"type": "string", "description": "\"none\", or describe the hazard"}
+      }
+    },
+    "Movement Data": {
+      "type": "array",
+      "description": "One entry per image, in order",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["time", "position_cm"],
+        "properties": {
+          "time": {"type": "string", "description": "the image's timestamp label"},
+          "position_cm": {"type": ["number", "null"], "description": "cm from the left wall; null if not visible"}
+        }
+      }
+    },
+    "Analysis": {"type": "string", "description": "Two to four sentences for the keeper: what the lizard did and anything to act on"}
+  }
+}
